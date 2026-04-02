@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "NSTJAX"
+version = "0.0.1"
+description = "A JAX based independent reimplementation of the control suite from Nonlinear Systems Toolbox by Professor A.J. Krener"
+authors = [
+    { name = "otoshuki", email = "guining.pertin.iitg@gmail.com" }
+]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "jax"
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
