@@ -211,5 +211,142 @@ classdef fbipoly
                 y  = y + Ck * mv;
             end
         end
+
+        function field = zerofield(nout, nvars, dmax)
+        %ZEROFIELD  Empty graded field with room for degrees 0..dmax
+            field = struct('nvars', nvars, 'nout', nout, ...
+                           'coef', {cell(1, dmax + 1)});
+        end
+
+        function field = constfield(nvars)
+        %CONSTFIELD  Scalar field equal to the constant 1
+            field = struct('nvars', nvars, 'nout', 1, 'coef', {{1}});
+        end
+
+        function H = addblock(H, k, B)
+        %ADDBLOCK  Add B into the degree-k block of field H
+            if k + 1 > numel(H.coef)
+                H.coef{k + 1} = [];
+            end
+            if isempty(H.coef{k + 1})
+                H.coef{k + 1} = B;
+            else
+                H.coef{k + 1} = H.coef{k + 1} + B;
+            end
+        end
+
+        function s = rowfield(field, i)
+        %ROWFIELD  Extract output row i of a field as a scalar (1-output) field
+            s = struct('nvars', field.nvars, 'nout', 1, ...
+                       'coef', {cell(1, numel(field.coef))});
+            for k = 0:numel(field.coef) - 1
+                Ck = field.coef{k + 1};
+                if ~isempty(Ck)
+                    s.coef{k + 1} = Ck(i, :);
+                end
+            end
+        end
+
+        function R = polymul(P, Q, dmax)
+        %POLYMUL  Truncated product of two scalar graded polynomials.
+        %Different from Krener's approach
+            n = P.nvars;
+            R = fbipoly.zerofield(1, n, dmax);
+            for ip = 0:numel(P.coef) - 1
+                Pp = P.coef{ip + 1};
+                if isempty(Pp), continue; end
+                for iq = 0:numel(Q.coef) - 1
+                    Qq = Q.coef{iq + 1};
+                    if isempty(Qq), continue; end
+                    k = ip + iq;
+                    if k > dmax, continue; end
+                    Ei = fbipoly.monomials(n, ip);
+                    Ej = fbipoly.monomials(n, iq);
+                    Mi = size(Ei, 1);
+                    Mj = size(Ej, 1);
+                    %all monomial pairs (a outer, b inner)
+                    Esum  = repelem(Ei, Mj, 1) + repmat(Ej, Mi, 1);
+                    cprod = kron(Pp(:), Qq(:));
+                    Lk = fbipoly.monomials(n, k);
+                    [~, pos] = ismember(Esum, Lk, 'rows');
+                    blk = accumarray(pos, cprod, [size(Lk, 1), 1]).';
+                    R = fbipoly.addblock(R, k, blk);
+                end
+            end
+        end
+
+        function H = composecore(F, G, dmax)
+        %COMPOSECORE  Compose graded fields:  H(y) = F(G(y)), to degree DMAX
+            m    = F.nvars;
+            n    = G.nvars;
+            nout = F.nout;
+            if G.nout ~= m
+                error('fbipoly:composecore', ...
+                    ['COMPOSECORE: F has %d input variables but G has %d ', ...
+                     'outputs; they must match.'], m, G.nout);
+            end
+            %Precompute powers Gpow{i}{e+1} = (i-th output of G)^e, e=0..dmax
+            Gpow = cell(1, m);
+            for i = 1:m
+                Gi = fbipoly.rowfield(G, i);
+                pw = cell(1, dmax + 1);
+                pw{1} = fbipoly.constfield(n);
+                for e = 1:dmax
+                    pw{e + 1} = fbipoly.polymul(pw{e}, Gi, dmax);
+                end
+                Gpow{i} = pw;
+            end
+            H = fbipoly.zerofield(nout, n, dmax);
+            for kf = 0:numel(F.coef) - 1
+                Ck = F.coef{kf + 1};
+                if isempty(Ck), continue; end
+                E = fbipoly.monomials(m, kf);
+                for r = 1:size(E, 1)
+                    alpha = E(r, :);
+                    c     = Ck(:, r);
+                    if all(c == 0), continue; end
+                    %image = prod_i G_i^{alpha_i}
+                    image = fbipoly.constfield(n);
+                    for i = 1:m
+                        if alpha(i) > 0
+                            image = fbipoly.polymul(image, Gpow{i}{alpha(i)+1}, dmax);
+                        end
+                    end
+                    %accumulate c * image into H
+                    for kk = 0:numel(image.coef) - 1
+                        B = image.coef{kk + 1};
+                        if isempty(B), continue; end
+                        H = fbipoly.addblock(H, kk, c * B);
+                    end
+                end
+            end
+        end
+
+        function [h, nh] = compose(f, nf, df, g, ng, dg, d)
+        %COMPOSE  Descriptor-level composition  h = f(g(.))
+            if isscalar(df), df = [df df]; end
+            if isscalar(dg), dg = [dg dg]; end
+            if isscalar(d),  d  = [d  d ]; end
+            nf = double(nf);
+            ng = double(ng);
+            if size(nf, 1) ~= size(ng, 1)
+                error('fbipoly:compose', 'NF and NG must have the same number of rows.');
+            end
+            finlast = nf(:, end);
+            goutcol = ng(:, 1);
+            %Require full clean alignment
+            if ~isequal(finlast, goutcol)
+                error('fbipoly:compose:alignment', ...
+                    ['COMPOSE: f-input subvectors (last column of NF) must ', ...
+                     'equal g-output subvectors (first column of NG) row by ', ...
+                     'row.  Partial substitution is not supported.']);
+            end
+            F = fbipoly.decode(f, nf, df);
+            G = fbipoly.decode(g, ng, dg);
+            H = fbipoly.composecore(F, G, d(end));
+            nh = nf;
+            nh(:, end) = ng(:, end);
+            h = fbipoly.encode(H, nh, d);
+        end
     end
 end
