@@ -348,5 +348,129 @@ classdef fbipoly
             nh(:, end) = ng(:, end);
             h = fbipoly.encode(H, nh, d);
         end
+
+        function A = addfield(A, B, dmax)
+        %ADDFIELD  Add field B into field A, keeping degrees 0..DMAX
+            for k = 0:numel(B.coef) - 1
+                Bk = B.coef{k + 1};
+                if isempty(Bk) || k > dmax, continue; end
+                A = fbipoly.addblock(A, k, Bk);
+            end
+        end
+
+        function dP = partialfield(P, j)
+        %PARTIALFIELD  Partial derivative dP/dx_j of a (multi-output) field.
+            ns   = P.nvars;
+            nout = P.nout;
+            dP   = fbipoly.zerofield(nout, ns, max(0, numel(P.coef) - 2));
+            for k = 1:numel(P.coef) - 1
+                Ck = P.coef{k + 1};
+                if isempty(Ck), continue; end
+                E    = fbipoly.monomials(ns, k);
+                aj   = E(:, j);
+                keep = aj > 0;
+                if ~any(keep), continue; end
+                Eb        = E(keep, :);
+                Eb(:, j)  = Eb(:, j) - 1;
+                scale     = aj(keep).';
+                Cs        = Ck(:, keep) .* scale;
+                Lk1       = fbipoly.monomials(ns, k - 1);
+                [~, pos]  = ismember(Eb, Lk1, 'rows');
+                Mk1       = size(Lk1, 1);
+                ridx      = repmat((1:nout).', 1, numel(pos));
+                cidx      = repmat(pos(:).', nout, 1);
+                blk       = accumarray([ridx(:), cidx(:)], Cs(:), [nout, Mk1]);
+                dP        = fbipoly.addblock(dP, k - 1, blk);
+            end
+        end
+
+        function R = polymulvec(P, Q, dmax)
+        %POLYMULVEC  Product of a multi-output field P and a scalar field Q.
+            n    = P.nvars;
+            nout = P.nout;
+            R    = fbipoly.zerofield(nout, n, dmax);
+
+            for ip = 0:numel(P.coef) - 1
+                Pp = P.coef{ip + 1};
+                if isempty(Pp), continue; end
+                for iq = 0:numel(Q.coef) - 1
+                    Qq = Q.coef{iq + 1};
+                    if isempty(Qq), continue; end
+                    k = ip + iq;
+                    if k > dmax, continue; end
+                    Ei = fbipoly.monomials(n, ip);
+                    Ej = fbipoly.monomials(n, iq);
+                    Mi = size(Ei, 1);
+                    Mj = size(Ej, 1);
+                    Esum = repelem(Ei, Mj, 1) + repmat(Ej, Mi, 1);
+                    Pexp = Pp(:, repelem(1:Mi, Mj));
+                    Qexp = Qq(repmat(1:Mj, 1, Mi));
+                    cpair = Pexp .* Qexp;
+                    Lk = fbipoly.monomials(n, k);
+                    [~, pos] = ismember(Esum, Lk, 'rows');
+                    Mk   = size(Lk, 1);
+                    K    = numel(pos);
+                    ridx = repmat((1:nout).', 1, K);
+                    cidx = repmat(pos(:).', nout, 1);
+                    blk  = accumarray([ridx(:), cidx(:)], cpair(:), [nout, Mk]);
+                    R = fbipoly.addblock(R, k, blk);
+                end
+            end
+        end
+
+        function H = ddmul(F, G, dmax)
+        %DDMUL  Directional derivative  H = (dF/dx) * G = sum_j dF/dx_j * G_j
+
+            ns   = F.nvars;
+            nout = F.nout;
+            if G.nvars ~= ns || G.nout ~= ns
+                error('fbipoly:ddmul', ...
+                    ['DDMUL needs G with %d inputs and %d outputs (to match ', ...
+                     'F''s %d variables); got %d inputs, %d outputs.'], ...
+                     ns, ns, ns, G.nvars, G.nout);
+            end
+
+            H = fbipoly.zerofield(nout, ns, dmax);
+            for j = 1:ns
+                dFj = fbipoly.partialfield(F, j);
+                Gj  = fbipoly.rowfield(G, j);
+                Pj  = fbipoly.polymulvec(dFj, Gj, dmax);
+                H   = fbipoly.addfield(H, Pj, dmax);
+            end
+        end
+
+        function [h, nh] = dd(f, nf, df, g, ng, dg, d)
+        %DD  Descriptor-level directional derivative
+            if isscalar(df), df = [df df]; end
+            if isscalar(dg), dg = [dg dg]; end
+            if isscalar(d),  d  = [d  d ]; end
+            nf = double(nf);
+            ng = double(ng);
+            if size(ng, 2) ~= 2
+                error('fbipoly:dd', 'NG must have exactly 2 columns.');
+            end
+            if size(nf, 1) ~= size(ng, 1)
+                error('fbipoly:dd', 'NF and NG must have the same number of rows.');
+            end
+            if ~isequal(nf(:, end), ng(:, 1)) || ~isequal(nf(:, end), ng(:, 2))
+                error('fbipoly:dd:alignment', ...
+                    ['DD supports only the case where f-inputs, g-outputs and ', ...
+                     'g-inputs coincide (as used throughout FBI).']);
+            end
+            F = fbipoly.decode(f, nf, df);
+            G = fbipoly.decode(g, ng, dg);
+            H = fbipoly.ddmul(F, G, d(end));
+            nh = nf;
+            h  = fbipoly.encode(H, nh, d);
+        end
+
+        function h = prt(f, nf, df, d)
+        %PRT  Extract the degrees-D part of a packed field
+            if isscalar(df), df = [df df]; end
+            if isscalar(d),  d  = [d  d ]; end
+            field = fbipoly.decode(f, nf, df);
+            h     = fbipoly.encode(field, nf, d);
+        end
+
     end
 end
