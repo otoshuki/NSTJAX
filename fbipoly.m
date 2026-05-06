@@ -1,7 +1,6 @@
-%Author: gpertin, KAIST
-
 classdef fbipoly
 %FBIPOLY  Polynomial-field library %
+%Author: gpertin, KAIST
 %Copyright (rewrite) 2025.  Original algorithm: A. J. Krener
     methods (Static)
 
