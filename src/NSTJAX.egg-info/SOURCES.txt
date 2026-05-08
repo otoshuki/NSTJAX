@@ -8,3 +8,4 @@ src/NSTJAX.egg-info/requires.txt
 src/NSTJAX.egg-info/top_level.txt
 src/NSTJAX/NSTJAX_bridge/__init__.py
 src/NSTJAX/NSTJAX_suite/__init__.py
+src/NSTJAX/NSTJAX_suite/taylor.py
