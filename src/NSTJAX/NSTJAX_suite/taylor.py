@@ -7,7 +7,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 from math import factorial
-from .polylib import factor_lists, monomials
+from NSTJAX.NSTJAX_suite.polylib import factor_lists, monomials
 
 def _afac(n, k):
     E = monomials(n, k)
