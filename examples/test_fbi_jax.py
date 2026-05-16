@@ -10,9 +10,9 @@ from itertools import combinations_with_replacement
 import numpy as np
 import jax
 import jax.numpy as jnp
-jax.config.update("jax_enable_x64", True)
 import NSTJAX.NSTJAX_suite.polylib as P
 from NSTJAX.NSTJAX_suite.fbi import fbi
+# from NSTJAX.NSTJAX_suite.fbi_fast import FBIFast
 from NSTJAX.NSTJAX_suite.taylor import build_taylor, build_taylor_batch, precompile
 from NSTJAX.NSTJAX_suite.fbi_eval import compute_theta, compute_lambda
 
@@ -85,9 +85,6 @@ def fbi_residual(th, la, f, h, fe):
                     float(jnp.max(jnp.abs(comp[k][n:]))))
     return worst
 
-def as_dtype(W, dt):
-    return jnp.asarray(np.asarray(W).astype(dt))
-
 #Inference: evaluate the packed FBI fields at a batch of exosystem samples
 def _monomial_layout(n_in, d, ncols):
     counts = [comb(n_in + k - 1, k) for k in range(0, d + 1)]
@@ -141,28 +138,13 @@ def main():
     #First FBI solve for compilation
     t = time.time()
     th, la = jax.block_until_ready(fbi(f, h, fe, n, m, p, n_, d))
+    # solver = FBIFast(n, m, p, n_, d, fixed=True)
+    # th, la = jax.block_until_ready(solver.solve(f, h, fe))
     t_compile = time.time() - t
     th = jnp.reshape(th, (n, -1))
     la = jnp.reshape(la, (m, -1))
     print(f"theta shape {th.shape}   lambda shape {la.shape}")
     print(f"regulator residual ({th.dtype}) = {fbi_residual(th, la, f, h, fe):.3e}\n")
-
-    #Precision comparison (reference = full f64 solve)
-    f32 = (as_dtype(f, np.float32), as_dtype(h, np.float32), as_dtype(fe, np.float32))
-    th64, la64 = jax.block_until_ready(fbi(f, h, fe, n, m, p, n_, d))
-    th32, la32 = jax.block_until_ready(fbi(*f32, n, m, p, n_, d))
-    thmx, lamx = jax.block_until_ready(fbi(*f32, n, m, p, n_, d, solve_dtype="f64"))
-
-    def rel(a, b):
-        a = np.asarray(a); b = np.asarray(b)
-        return float(np.max(np.abs(a - b)) / (np.max(np.abs(b)) + 1e-30))
-
-    print("precision comparison (reference = full f64 solve)")
-    print(f"  f64            residual {fbi_residual(th64, la64, f, h, fe):.2e}")
-    print(f"  f32            residual {fbi_residual(th32, la32, *f32):.2e}   "
-          f"rel-to-f64 {rel(th32, th64):.2e}")
-    print(f"  f32 + f64solve residual {fbi_residual(thmx, lamx, *f32):.2e}   "
-          f"rel-to-f64 {rel(thmx, th64):.2e}\n")
 
     #MATLAB comparison
     if (os.path.exists("x_test_batch.npy") and os.path.exists("th_val_mat.npy")
@@ -178,11 +160,8 @@ def main():
             return (float(jnp.max(jnp.abs(tv - th_ref))) / sth,
                     float(jnp.max(jnp.abs(lv - la_ref))) / sla)
         print(f"MATLAB comparison, {Xm.shape[0]} samples (reference = MATLAB evaluated values)")
-        for name, thc, lac in (("f64", th64, la64),
-                               ("f32", th32, la32),
-                               ("f32 + f64solve", thmx, lamx)):
-            dth, dla = mat_rel(thc, lac)
-            print(f"  {name:<14} rel-theta {dth:.2e}   rel-lambda {dla:.2e}")
+        dth, dla = mat_rel(th, la)
+        print(f"  f32            rel-theta {dth:.2e}   rel-lambda {dla:.2e}")
         print()
     else:
         print("MATLAB reference values not found, skipping comparison\n")
@@ -191,6 +170,7 @@ def main():
     t = time.time()
     for _ in range(WARM_REPS):
         out = fbi(f, h, fe, n, m, p, n_, d)
+        # out = solver.solve(f, h, fe)
     jax.block_until_ready(out)
     t_warm = (time.time() - t) / WARM_REPS
     print("timing")
@@ -236,6 +216,7 @@ def main():
         t1 = time.perf_counter()
 
         th, la = fbi(f, h, fe, n, m, p, n_, d)
+        # th, la = solver.solve(f, h, fe)
         th, la = jax.block_until_ready((th, la))
         th = jnp.reshape(th, (n, -1)); la = jnp.reshape(la, (m, -1))
         t2 = time.perf_counter()

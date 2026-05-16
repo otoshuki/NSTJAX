@@ -8,7 +8,6 @@ import time
 import numpy as np
 import jax
 import jax.numpy as jnp
-# jax.config.update("jax_enable_x64", True)
 from NSTJAX.NSTJAX_suite.taylor import build_taylor, build_taylor_batch, precompile
 
 #System Design: Drone tracking problem

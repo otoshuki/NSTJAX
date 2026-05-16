@@ -277,7 +277,7 @@ def _ddmul_plan(n, dmax, fdegs):
                         opos.append(off[od] + posmaps[od][tuple(out_exp)])
                         scale.append(aj)
     return (np.array(fpos, np.int64), np.array(gpos, np.int64),
-            np.array(opos, np.int64), np.array(scale, np.float64))
+            np.array(opos, np.int64), np.array(scale, np.float32))
 
 @lru_cache(maxsize=None)
 def _compose_plan_j(n_inter, n_new, dmax, fdegs):
@@ -334,9 +334,8 @@ def ddmul(F, G, n, dmax):
     H_flat = _ddmul_exec(F_flat, G1d, fpos, gpos, opos, scale, fl)
     return _unpack_full(H_flat, n, dmax)
 
-
 def lie_operator(A, n, k):
-    #matrix of p -> (dp/dx)(A x) on the degree k monomial basis
+    #Matrix of p -> (dp/dx)(A x) on the degree k monomial basis
     A = jnp.asarray(A)
     dt = A.dtype
     Mk = crd(n, k)
