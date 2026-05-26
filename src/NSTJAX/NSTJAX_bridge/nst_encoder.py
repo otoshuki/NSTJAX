@@ -6,8 +6,7 @@ Encodes new coefficient arrangement to MATLAB format
 import numpy as np
 import jax
 import jax.numpy as jnp
-from functools import partial
-from NSTJAX.NSTJAX_suite.polylib import eval_monomials, monomials, crd
+from NSTJAX.NSTJAX_suite.polylib import monomials, crd
 
 def reduced_perm(svlth, k):
     #Permutation taking lex order to the MATLAB reduced order at degree k
