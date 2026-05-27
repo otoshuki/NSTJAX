@@ -27,6 +27,59 @@ This solution is a **local polynomial approximation** built from a Taylor expans
 
 ---
 
+## Quickstart
+
+The high level `NSTJAX` object wraps map building, solver selection and inference. Define the plant, the exosystem and the error map, warm start once, then solve at any operating point.
+
+```python
+import jax.numpy as jnp
+from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
+
+#Dimensions: states n, controls m, errors p, exosystem n_, expansion degree d
+n, m, p, n_, d = 10, 4, 24, 4, 2
+nsum = n + m + n_
+
+#fsys and hsys take z = concat([x, u, w]); fexo takes the exosystem state w
+def fsys(z): ...
+def fexo(w): ...
+def hsys(z): ...
+
+#Operating point
+z0 = jnp.zeros(nsum)
+x_0 = jnp.zeros(n_)
+
+nst = NSTJAX(fsys, fexo, hsys, n, m, p, n_, d, verbose=True)
+nst.warm_start(z0, x_0, samples=256)
+
+#Solve at a moving operating point
+th, la = nst.compute_fbi(z0, x_0)
+
+#Evaluate the manifold and feedforward at a batch of exosystem samples
+W = jnp.zeros((256, n_))
+pi = nst.compute_theta(W)
+c = nst.compute_lambda(W)
+```
+
+The auto solver routes small systems to the dense solve and large ones to the decoupled solve. The first call compiles, later calls reuse the cached kernels.
+
+## Background
+
+The library targets the **output regulation** problem. A plant, an exosystem driving the reference, and an error output
+
+$$\dot{x} = f(x, u, x_-), \qquad \dot{x}_- = s(x_-), \qquad e = h(x, u, x_-)$$
+
+are given, and the goal is to drive the error to zero. The Francis Byrnes Isidori (FBI) regulator equations ask for a manifold `x = theta(x_)` and a feedforward `u = lambda(x_)` satisfying
+
+$$\frac{\partial\, \theta}{\partial x_-}\, s(x_-) = f\big(\theta(x_-), \lambda(x_-), x_-\big), \qquad 0 = h\big(\theta(x_-), \lambda(x_-), x_-\big).$$
+
+The first equation makes the manifold invariant under the combined flow, the second makes the error vanish on it. On this manifold the plant reproduces the reference exactly; the feedforward is what keeps it there.
+
+FBIJAX solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
+
+> **Figure 2** — _FBI residual versus distance from the operating point, with one curve per expansion degree._ Shows the local approximation degrading away from the center and motivates the per step re-solve. Placeholder: `docs/figures/residual_vs_distance.png`
+
+---
+
 ## References
 
 - A. Isidori and C. I. Byrnes, output regulation of nonlinear systems.
