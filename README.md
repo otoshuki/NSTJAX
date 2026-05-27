@@ -76,7 +76,15 @@ The first equation makes the manifold invariant under the combined flow, the sec
 
 FBIJAX solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
 
-> **Figure 2** — _FBI residual versus distance from the operating point, with one curve per expansion degree._ Shows the local approximation degrading away from the center and motivates the per step re-solve. Placeholder: `docs/figures/residual_vs_distance.png`
+## The solve pipeline
+
+Each operating point passes through three stages:
+
+1. **Taylor maps** (`taylor.py`) build JIT compiled coefficient maps for `f`, `h` and the exosystem, evaluated by forward mode differentiation. The maps are built once and reused; each call returns the packed graded coefficients of the field at the current operating point.
+2. **FBI solve** (`fbi.py` or `fbi_fast.py`) solves the regulator equations degree by degree and returns the packed `theta` and `lambda` coefficients. Degree one is the linear regulator; each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients through the polynomial algebra in `polylib.py`.
+3. **Inference** (`fbi_eval.py`) evaluates the manifold `theta(x_)` and the feedforward `lambda(x_)` on a batch of exosystem samples, reusing the cached evaluation kernel.
+
+After the first compiling call the warm path is the relevant timing, and the whole pipeline is cheap enough to refresh at every operating point in a moving loop.
 
 ---
 
