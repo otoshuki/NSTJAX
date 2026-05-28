@@ -62,6 +62,8 @@ c = nst.compute_lambda(W)
 
 The auto solver routes small systems to the dense solve and large ones to the decoupled solve. The first call compiles, later calls reuse the cached kernels.
 
+---
+
 ## Background
 
 The library targets the **output regulation** problem. A plant, an exosystem driving the reference, and an error output
@@ -76,6 +78,8 @@ The first equation makes the manifold invariant under the combined flow, the sec
 
 FBIJAX solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
 
+---
+
 ## The solve pipeline
 
 Each operating point passes through three stages:
@@ -87,6 +91,26 @@ Each operating point passes through three stages:
 After the first compiling call the warm path is the relevant timing, and the whole pipeline is cheap enough to refresh at every operating point in a moving loop.
 
 ---
+
+## Dense `fbi` versus decoupled `fbi_fast`
+
+At each degree `k` the regulator equation has the operator form
+
+$$M\, W - \mathrm{Sel}\, W\, L^{(k)} = R,$$
+
+where `M` is the combined linear plant and output Jacobian, `Sel` selects the state block, and `L^{(k)}` is the degree `k` Lie operator of the exosystem linear part. The unknown `W` stacks the degree `k` coefficients of `theta` and `lambda`.
+
+- **`fbi`** vectorizes this into the dense Kronecker operator `kron(I, M) - kron(L^T, Sel)` and solves it directly, square systems through a direct solve and non square ones through least squares. The operator has size `(n + p) * crd(n_, d)`, which grows quickly with the exosystem dimension and the degree.
+
+- **`fbi_fast`** decouples the equation through the Schur form of the Lie operator and solves per degree, with two branches:
+  - **nilpotent** exosystems (integrator chains, such as the drone's six derivative trajectory generator) use a finite Neumann sum that is exact in a small number of terms,
+  - **general** exosystems use complex Schur back substitution, one small `(n + m)` solve per column instead of a single large solve.
+
+  With `fixed=True` the exosystem factorization is computed once and reused across operating points, which is the common case in a moving loop. `NSTJAX` routes automatically based on the Kronecker dimension via `auto_threshold`, sending small systems to the dense solve and large ones to the decoupled solve.
+
+---
+
+
 
 ## References
 
