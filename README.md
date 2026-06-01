@@ -110,7 +110,30 @@ where `M` is the combined linear plant and output Jacobian, `Sel` selects the st
 
 ---
 
+## Solvability screen
 
+The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosystem eigenvalues. The regulator equations are solvable when none of these coincide with a **transmission zero** of the `(M, Sel)` pencil. `solvability.py` and the `check` option in `fbi_fast` report, per degree, the gap between the operator spectrum and the transmission zeros, flagging resonant degrees and the structural regime (square, over or underdetermined). An overdetermined regime, where the error channel count exceeds the control count, is flagged as structurally infeasible; a resonant degree, where the gap falls below tolerance, signals a coincidence that makes the per degree solve singular.
+
+---
+
+## Modules
+
+| Module | Role |
+| --- | --- |
+| `polylib.py` | Polynomial vector field algebra: monomial bases, composition, directional derivatives, Lie operators |
+| `taylor.py` | JIT compiled Taylor coefficient maps via forward mode differentiation |
+| `fbi.py` | Dense FBI solve through the full Kronecker operator |
+| `fbi_fast.py` | Decoupled FBI solve via exosystem spectral decoupling, with a solvability guard |
+| `decouple.py` | Exosystem Schur factorization and per degree operator spectra |
+| `solvability.py` | Transmission zero based solvability screen |
+| `fbi_eval.py` | Batched evaluation of `theta(x_)` and `lambda(x_)` |
+| `nstjax.py` | High level driver tying maps, solver and inference into one object |
+
+---
+
+## Validation
+
+The solve is cross checked against the original MATLAB NST values when reference arrays are present (`test_fbi_jax.py`), and against the dense Kronecker reference for the decoupled kernels (`test_fbi_fast.py`). The FBI residual measures how well the truncated polynomial solution satisfies the regulator equations at the operating point.
 
 ## References
 
