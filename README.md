@@ -175,13 +175,31 @@ After warmup the full step, coefficients, solve and inference together, runs at 
 
 ## Examples
 
-The repository ships runnable examples for a drone and a double pendulum, at the high level `NSTJAX` interface and a lower level direct solve.
+The repository ships runnable examples for a drone and a double pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
 
 <p align="center">
   <img src="docs/figures/pendulum_phase.png" width="840" alt="Double pendulum nominal manifold and tracking">
 </p>
 
 <p align="center"><em>Double pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
+
+---
+
+### World model learning with FBI
+
+`example_wm_fbi.py` closes the loop around a learned plant. The true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
+
+1. **Solve.** Taylor expand the current `f_hat` at the operating point and run the FBI solve to get the manifold `theta` and feedforward `lambda` for the learned model, plus a feedback gain by pole placement on its linearization.
+2. **Roll out.** Drive the true system in closed loop with feedforward plus feedback plus a decaying dither, and collect the on-policy transitions.
+3. **Learn.** Aggregate the transitions across rounds and fit the residual MLP by matching a one step RK4 prediction to the next state.
+
+As the world model improves, the FBI solution computed on it approaches the one computed on the true plant, so the learned manifold and feedforward converge to the oracle and the closed loop tracking error drops to the oracle floor.
+
+<p align="center">
+  <img src="docs/figures/world_model_convergence.png" width="840" alt="World model FBI convergence">
+</p>
+
+<p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
 
 ---
 
