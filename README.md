@@ -54,9 +54,9 @@ from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
 n, m, p, n_, d = 10, 4, 24, 4, 2
 nsum = n + m + n_
 
-#fsys and hsys take z = concat([x, u, w]); fexo takes the exosystem state w
+#fsys and hsys take z = concat([x, u, x_]); fexo takes the exosystem state w
 def fsys(z): ...
-def fexo(w): ...
+def fexo(x_): ...
 def hsys(z): ...
 
 #Operating point
@@ -71,33 +71,90 @@ th, la = nst.compute_fbi(z0, x_0)
 
 #Evaluate the manifold and feedforward at a batch of exosystem samples
 W = jnp.zeros((256, n_))
-pi = nst.compute_theta(W)
-c = nst.compute_lambda(W)
+tracking_manifold = nst.compute_theta(W) #(samples x n)
+feedforward = nst.compute_lambda(W)      #(samples x m)
 ```
 
 The auto solver routes small systems to the dense solve and large ones to the decoupled solve. The first call compiles, later calls reuse the cached kernels.
 
 ---
 
+## Performance
+
+After warmup the full step, coefficients, solve and inference together, runs at about 12 ms for the drone system with its six derivative exosystem (10 states, 24 exostates, 4 inputs, 4 outputs). This is performed on a laptop with Ryzen 7 8845hs CPU, 32GB RAM, and NVIDIA GeForce RTX 4060 Laptop with 8GB VRAM.
+
+<p align="center">
+  <img src="docs/figures/timing_breakdown.png" width="840" alt="Per step timing breakdown and inference throughput">
+</p>
+
+<p align="center"><em>Per step cost split into coefficients, FBI solve and inference, with inference throughput against batch size.</em></p>
+
+---
+
+## Examples
+
+The repository ships runnable examples for a drone and a double pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
+
+<p align="center">
+  <img src="docs/figures/pendulum_phase.png" width="840" alt="Double pendulum nominal manifold and tracking">
+</p>
+
+<p align="center"><em>Double pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
+
+### World model learning with FBI
+
+`example_wm_fbi.py` closes the loop around a learned plant. The true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
+
+1. **Solve.** Taylor expand the current `f_hat` at the operating point and run the FBI solve to get the manifold `theta` and feedforward `lambda` for the learned model, plus a feedback gain by pole placement on its linearization.
+2. **Roll out.** Drive the true system in closed loop with feedforward plus feedback plus a decaying dither, and collect the on-policy transitions.
+3. **Learn.** Aggregate the transitions across rounds and fit the residual MLP by matching a one step RK4 prediction to the next state.
+
+As the world model improves, the FBI solution computed on it approaches the one computed on the true plant, so the learned manifold and feedforward converge to the oracle and the closed loop tracking error drops to the oracle floor.
+
+<p align="center">
+  <img src="docs/figures/world_model_convergence.png" width="840" alt="World model FBI convergence">
+</p>
+
+<p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
+
+---
+
+## Solution Validation Against Original NST
+
+The solve is cross checked against the original MATLAB NST values when reference arrays are present (`test_fbi_jax.py`), and against the dense Kronecker reference for the decoupled kernels (`test_fbi_fast.py`). The FBI residual measures how well the truncated polynomial solution satisfies the regulator equations at the operating point.
+
+<p align="center">
+  <img src="docs/figures/matlab_error.png" width="840" alt="Relative error against the MATLAB reference">
+</p>
+
+<p align="center"><em>Per coefficient relative error of the float32 solve against the MATLAB NST reference.</em></p>
+
+---
+
+# Additional Information
+
 ## Background
 
 The library targets the **output regulation** problem. A plant, an exosystem driving the reference, and an error output
 
-$$\dot{x} = f(x, u, x_-), \qquad \dot{x}_- = s(x_-), \qquad e = h(x, u, x_-)$$
+$$\dot{x} = f(x, u, \bar{x}), \qquad \dot{\bar{x}} = \bar{f}(\bar{x}), \qquad e = h(x, u, \bar{x})$$
 
-are given, and the goal is to drive the error to zero. The Francis Byrnes Isidori (FBI) regulator equations ask for a manifold `x = theta(x_)` and a feedforward `u = lambda(x_)` satisfying
+are given, and the goal is to drive the error to zero. The Francis Byrnes Isidori (FBI) regulator equations ask for a manifold $x=\theta(\bar{x})$ and a feedforward $u=\lambda(\bar{x})$ satisfying
 
-$$\frac{\partial\, \theta}{\partial x_-}\, s(x_-) = f\big(\theta(x_-), \lambda(x_-), x_-\big), \qquad 0 = h\big(\theta(x_-), \lambda(x_-), x_-\big).$$
+$$f(\theta(\bar{x}),\lambda(\bar{x})) = \frac{\partial \theta}{\partial \bar{x}}(\bar{x})\bar{f}(\bar{x}) \qquad h(\theta(\bar{x}),\bar{x},\lambda(\bar{x})) = 0.$$
 
-The first equation makes the manifold invariant under the combined flow, the second makes the error vanish on it. On this manifold the plant reproduces the reference exactly; the feedforward is what keeps it there.
+The first equation makes the manifold invariant under the combined flow, the second makes the output error vanish on it.
 
-FBIJAX solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
+Following NST, the FBIJAX component solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
 
 <p align="center">
-  <img src="docs/figures/residual_vs_distance.png" width="560" alt="FBI residual versus distance from the operating point">
+  <img src="docs/figures/residual_vs_distance_truefbi.png" width="48%" alt="True FBI residual versus distance from the operating point">
+  <img src="docs/figures/residual_vs_distance.png" width="48%" alt="FBI residual versus distance from the operating point">
+  
 </p>
-
-<p align="center"><em>FBI residual against distance from the operating point. A stale solve degrades as the state moves away, while re-solving at each point holds the error down.</em></p>
+<p align="center">
+  <em>(a) FBI solution (b) Fast FBI solution. A stale solve degrades as the state moves away, while re-solving at each point holds the error down.</em>
+</p>
 
 ---
 
@@ -127,10 +184,10 @@ $$M\, W - \mathrm{Sel}\, W\, L^{(k)} = R,$$
 
 where `M` is the combined linear plant and output Jacobian, `Sel` selects the state block, and `L^{(k)}` is the degree `k` Lie operator of the exosystem linear part. The unknown `W` stacks the degree `k` coefficients of `theta` and `lambda`.
 
-- **`fbi`** vectorizes this into the dense Kronecker operator `kron(I, M) - kron(L^T, Sel)` and solves it directly, square systems through a direct solve and non square ones through least squares. The operator has size `(n + p) * crd(n_, d)`, which grows quickly with the exosystem dimension and the degree.
+- **`fbi`** vectorizes this into the dense Kronecker operator `kron(I, M) - kron(L^T, Sel)` and solves it directly, square systems through a direct solve and non square ones through least squares. The operator has size `(n + p) * crd(n_, d)`, which grows quickly with the system dimension and the degree.
 
 - **`fbi_fast`** decouples the equation through the Schur form of the Lie operator and solves per degree, with two branches:
-  - **nilpotent** exosystems (integrator chains, such as the drone's six derivative trajectory generator) use a finite Neumann sum that is exact in a small number of terms,
+  - **nilpotent** exosystems (integrator chains, such as polynomial trajectory generator) use a finite Neumann sum that is exact in a small number of terms,
   - **general** exosystems use complex Schur back substitution, one small `(n + m)` solve per column instead of a single large solve.
 
   With `fixed=True` the exosystem factorization is computed once and reused across operating points, which is the common case in a moving loop. `NSTJAX` routes automatically based on the Kronecker dimension via `auto_threshold`, sending small systems to the dense solve and large ones to the decoupled solve.
@@ -155,78 +212,13 @@ The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosys
 
 ---
 
-## Performance
-
-After warmup the full step, coefficients, solve and inference together, runs at about 12 ms for the drone with its six derivative exosystem.
-
-<p align="center">
-  <img src="docs/figures/timing_breakdown.png" width="840" alt="Per step timing breakdown and inference throughput">
-</p>
-
-<p align="center"><em>Per step cost split into coefficients, FBI solve and inference, with inference throughput against batch size.</em></p>
-
----
-
-## Modules
-
-| Module | Role |
-| --- | --- |
-| `polylib.py` | Polynomial vector field algebra: monomial bases, composition, directional derivatives, Lie operators |
-| `taylor.py` | JIT compiled Taylor coefficient maps via forward mode differentiation |
-| `fbi.py` | Dense FBI solve through the full Kronecker operator |
-| `fbi_fast.py` | Decoupled FBI solve via exosystem spectral decoupling, with a solvability guard |
-| `decouple.py` | Exosystem Schur factorization and per degree operator spectra |
-| `solvability.py` | Transmission zero based solvability screen |
-| `fbi_eval.py` | Batched evaluation of `theta(x_)` and `lambda(x_)` |
-| `nstjax.py` | High level driver tying maps, solver and inference into one object |
-
----
-
-## Examples
-
-The repository ships runnable examples for a drone and a double pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
-
-<p align="center">
-  <img src="docs/figures/pendulum_phase.png" width="840" alt="Double pendulum nominal manifold and tracking">
-</p>
-
-<p align="center"><em>Double pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
-
----
-
-### World model learning with FBI
-
-`example_wm_fbi.py` closes the loop around a learned plant. The true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
-
-1. **Solve.** Taylor expand the current `f_hat` at the operating point and run the FBI solve to get the manifold `theta` and feedforward `lambda` for the learned model, plus a feedback gain by pole placement on its linearization.
-2. **Roll out.** Drive the true system in closed loop with feedforward plus feedback plus a decaying dither, and collect the on-policy transitions.
-3. **Learn.** Aggregate the transitions across rounds and fit the residual MLP by matching a one step RK4 prediction to the next state.
-
-As the world model improves, the FBI solution computed on it approaches the one computed on the true plant, so the learned manifold and feedforward converge to the oracle and the closed loop tracking error drops to the oracle floor.
-
-<p align="center">
-  <img src="docs/figures/world_model_convergence.png" width="840" alt="World model FBI convergence">
-</p>
-
-<p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
-
----
-
-## Validation
-
-The solve is cross checked against the original MATLAB NST values when reference arrays are present (`test_fbi_jax.py`), and against the dense Kronecker reference for the decoupled kernels (`test_fbi_fast.py`). The FBI residual measures how well the truncated polynomial solution satisfies the regulator equations at the operating point.
-
-<p align="center">
-  <img src="docs/figures/matlab_error.png" width="840" alt="Relative error against the MATLAB reference">
-</p>
-
-<p align="center"><em>Per coefficient relative error of the float32 solve against the MATLAB NST reference.</em></p>
-
 ## References
 
 - A. Isidori and C. I. Byrnes, output regulation of nonlinear systems.
 - B. A. Francis, the linear multivariable regulator problem.
 - A. J. Krener, Nonlinear Systems Toolbox.
+
+---
 
 ## Citation
 Author: otoshuki (gpertin), KAIST.

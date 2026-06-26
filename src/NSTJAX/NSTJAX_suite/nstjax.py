@@ -16,7 +16,7 @@ class NSTJAX:
     #User provides the system, then warm starts, then solves at any operating point
     def __init__(self, fsys, fexo, hsys, n, m, p, n_, d,
                  solver="auto", fixed=True, branch="auto", check="off",
-                 auto_threshold=512, reshape=True, store=True, verbose=False):
+                 auto_threshold=20e2, reshape=True, store=True, verbose=False):
         self.fsys, self.fexo, self.hsys = fsys, fexo, hsys
         self.n, self.m, self.p, self.n_, self.d = n, m, p, n_, d
         self.nsum = n + m + n_

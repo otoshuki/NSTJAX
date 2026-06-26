@@ -88,24 +88,25 @@ def build_pendulum():
     return SimpleNamespace(fsys=fsys, fexo=fexo, hsys=hsys, n=n, m=m, p=p,
                            n_=n_, d=d, nsum=nsum, z0=z0, x_0=x_0)
 
-#Scalable nilpotent system, small fixed plant with a shift chain exosystem
+#Scalable nilpotent system, fixed plant with a shift chain exosystem
 def build_synth_chain(n_, d):
-    n, m, p = 2, 1, 1
+    n, m, p = 8, 4, 4
     nsum = n + m + n_
-    A = jnp.array([[0.0, 1.0], [-1.0, -0.5]])
-    B = jnp.array([[0.0], [1.0]])
-    C = jnp.array([[1.0, 0.0]])
+    A = 2.0 * jnp.eye(n)
+    B = jnp.concatenate([jnp.eye(m), jnp.zeros((n - m, m))], axis=0)
+    C = jnp.concatenate([jnp.eye(p), jnp.zeros((p, n - p))], axis=1)
+    E = jnp.zeros((n, n_)).at[0, 0].set(1.0)
 
     def fsys(z):
         x = z[:n]; u = z[n:n + m]; w = z[n + m:]
-        return A @ x + B @ u + jnp.array([0.0, w[0]])
+        return A @ x + B @ u + E @ w
 
     def fexo(w):
         return jnp.concatenate([w[1:], jnp.zeros(1)])
 
     def hsys(z):
         x = z[:n]; w = z[n + m:]
-        return C @ x - jnp.array([w[0]])
+        return C @ x - jnp.concatenate([w[:1], jnp.zeros(p - 1)])
 
     return SimpleNamespace(fsys=fsys, fexo=fexo, hsys=hsys, n=n, m=m, p=p,
                            n_=n_, d=d, nsum=nsum, z0=jnp.zeros(nsum), x_0=jnp.zeros(n_))
@@ -262,7 +263,7 @@ def fig_residual_vs_distance():
 
 #Figure 4, solver time versus problem size on one nilpotent family
 def fig_solver_crossover():
-    n_list = [6, 8, 10, 13, 16, 20, 24]
+    n_list = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
     d = 2
     kd, t_fbi, t_fast = [], [], []
     for n_ in n_list:
@@ -274,7 +275,7 @@ def fig_solver_crossover():
         h = jax.block_until_ready(tay_h(s.z0))
         fe = jax.block_until_ready(tay_e(s.x_0))
         solver = FBIFast(s.n, s.m, s.p, s.n_, d, fixed=True)
-        reps = 20 if n_ <= 16 else 8
+        reps = 20 if n_ <= 12 else 8
         try:
             tf = _time(lambda: fbi(f, h, fe, s.n, s.m, s.p, s.n_, d), reps)
             tn = _time(lambda: solver.solve(f, h, fe)[:2], reps)
@@ -287,7 +288,7 @@ def fig_solver_crossover():
     plt.figure(figsize=(7, 4.5))
     plt.loglog(kd, t_fbi, "-o", label="fbi (dense kron)")
     plt.loglog(kd, t_fast, "-s", label="fbi_fast (decoupled)")
-    plt.axvline(512, color="#9ca3af", ls="--", label="auto threshold")
+    plt.axvline(20e2, color="#9ca3af", ls="--", label="auto threshold")
     plt.xlabel("kron dimension  (n + p) * crd(n_, d)")
     plt.ylabel("warm solve time  (ms)")
     plt.title("Dense versus decoupled solve, exosystem dimension sweep")
