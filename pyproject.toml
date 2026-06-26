@@ -10,10 +10,12 @@ authors = [
     { name = "otoshuki", email = "guining.pertin.iitg@gmail.com" }
 ]
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.11"
 dependencies = [
     "numpy",
-    "jax"
+    "scipy",
+    "jax",
 ]
 
 [tool.setuptools]
