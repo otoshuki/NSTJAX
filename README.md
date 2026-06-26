@@ -1,3 +1,12 @@
+<div align="center">
+
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![JAX](https://img.shields.io/badge/JAX-white?style=for-the-badge&logo=Google%20JAX&logoColor=black)
+![NumPy](https://img.shields.io/badge/numpy-%23013243.svg?style=for-the-badge&logo=numpy&logoColor=white)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg?style=for-the-badge)](https://opensource.org/licenses/BSD-3-Clause)
+
+</div>
+
 # A JAX based independent reimplementation of the control suite from Nonlinear Systems Toolbox by Professor A.J. Krener
 
 Please note that this is not intended to copy the original MATLAB suite one-to-one. The original toolbox can be obtained from https://www.math.ucdavis.edu/~krener/nst08.zip
