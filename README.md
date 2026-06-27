@@ -7,7 +7,7 @@
 
 </div>
 
-# A JAX based independent reimplementation of the control suite from Nonlinear Systems Toolbox by Professor A.J. Krener
+## A JAX based independent reimplementation of the control suite from Nonlinear Systems Toolbox by Professor A.J. Krener
 
 Please note that this is not intended to copy the original MATLAB suite one-to-one. The original toolbox can be obtained from https://www.math.ucdavis.edu/~krener/nst08.zip
 
@@ -18,11 +18,7 @@ The entire project is divided into two parts:
 1. **NSTJAX_suite**: Reimplementation of Al'Brekht's approach based on Krener's designs in JAX.
 2. **NSTJAX_bridge**: A bridging component to convert computed matrices between the original NST in MATLAB and NSTJAX.
 
-To use the library please install using
-
-```bash
-pip install -e .
-```
+To use the library please install using `pip install -e .`
 
 ---
 
@@ -34,23 +30,31 @@ Given a controlled plant, an exosystem that generates the reference signal, and 
 
 This solution is a **local polynomial approximation** built from a Taylor expansion around the current operating point. It is cheap enough to recompute at every step (about **12 ms** for the full drone system with a six derivative exosystem), so the manifold can be refreshed as the operating point moves and the approximation stays accurate everywhere along the trajectory rather than only near a single linearization.
 
+Both continuous and discrete time plants are supported. For the discrete case (`disc=True`), the manifold is held invariant by a composition $\theta(\bar{f}(\bar{x}))$ instead of a derivative.
+
+### The solver pipeline
+
 <p align="center">
-  <img src="docs/figures/drone_nominal_trajectory.png" width="840" alt="Nominal drone trajectory and feedforward">
+  <img src="docs/figures/pipeline.svg" width="880" alt="FBIJAX solve pipeline">
 </p>
 
-<p align="center"><em>Nominal flight path produced by rolling the exosystem through the tracking manifold theta, with the feedforward lambda along the trajectory.</em></p>
+<p align="center"><em>The solve pipeline: Taylor maps, the degree by degree FBI solve, and batched inference, refreshed at each operating point.</em></p>
 
-Both continuous and discrete time plants are supported. For the discrete case (`disc=True`), the manifold is held invariant by a composition $\theta(\bar{f}(\bar{x}))$ instead of a derivative, and the per degree operator spectrum becomes products of the exosystem eigenvalues rather than sums.
+Each operating point passes through three stages:
 
----
+1. **Taylor maps** (`taylor.py`) build JIT compiled coefficient maps for `f`, `h` and the exosystem, evaluated by forward mode differentiation. The maps are built once and reused; each call returns the packed graded coefficients of the field at the current operating point.
+2. **FBI solve** (`fbi.py` or `fbi_fast.py`) solves the regulator equations degree by degree and returns the packed `theta` and `lambda` coefficients. Degree one is the linear regulator; each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients through the polynomial algebra in `polylib.py`.
+3. **Inference** (`fbi_eval.py`) evaluates the manifold `theta(x_)` and the feedforward `lambda(x_)` on a batch of exosystem samples, reusing the cached evaluation kernel.
 
-## Quickstart
+After the first compiling call the warm path is the relevant timing, and the whole pipeline is cheap enough to refresh at every operating point in a moving loop. A high level wrapper `NSTJAX` is provided is provided to make it easier for the user.
+
+### Quickstart
 
 The high level `NSTJAX` object wraps map building, solver selection and inference. Define the plant, the exosystem and the error map, warm start once, then solve at any operating point.
 
 ```python
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
+from NSTJAX import NSTJAX
 
 #Dimensions: states n, controls m, errors p, exosystem n_, expansion degree d
 n, m, p, n_, d = 10, 4, 24, 4, 2
@@ -79,9 +83,7 @@ feedforward = nst.compute_lambda(W)      #(samples x m)
 
 The auto solver routes small systems to the dense solve and large ones to the decoupled solve. The first call compiles, later calls reuse the cached kernels.
 
----
-
-## Performance
+### Performance
 
 After warmup the full step, coefficients, solve and inference together, runs at about 12 ms for the drone system with its six derivative exosystem (10 states, 24 exostates, 4 inputs, 4 outputs). On the smaller pendulum system (2 states, 3 exostates, 1 input, 1 output), it takes approx 0.5ms. This is performed on a laptop with Ryzen 7 8845hs CPU, 32GB RAM, and NVIDIA GeForce RTX 4060 Laptop with 8GB VRAM.
 
@@ -98,26 +100,46 @@ After warmup the full step, coefficients, solve and inference together, runs at 
 
 ## Examples
 
-The repository ships runnable examples for a drone and a controlled pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
+The repository ships runnable examples for a drone and a controlled pendulum, at the high level `NSTJAX` interface and a lower level direct solve.
 
 <p align="center">
-  <img src="docs/figures/pendulum_phase.png" width="840" alt="Pendulum nominal manifold and tracking">
+  <img src="docs/figures/pendulum_phase.png" width="50%" alt="Pendulum nominal manifold and tracking">
+  <img src="docs/figures/drone_nominal_trajectory.png" width="45%"alt="Nominal drone trajectory and feedforward">
 </p>
 
-<p align="center"><em>Pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
+<p align="center"><em>Pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold. Drone: Nominal flight path with the feedforward along the trajectory</em></p>
+
 
 ### Periodic disturbance rejection for thruster
-`example_thruster.py` considers a thruster with period wind disturbance and compares the performance between feedback only and feedback+FBI feedforward case. The RMSE reduces by 129x (from 1.991e-01 to 1.536e-03) while taking only 0.966 ms for the entire FBI+inference computation at 256 samples per step.
+`example_thruster.py` considers a thruster with period wind disturbance and compares the performance between feedback only and feedback+FBI feedforward case. The RMSE reduces by 129x (from 1.991e-01 to 1.536e-03) while taking only 0.96 ms for the entire Taylor+FBI+Inference computation (Note that if you warmstart with a single sample, for some reason the computation is slower, still working on this bug).
 
 <p align="center">
-  <img src="docs/figures/tracking_anim.gif" width="560" alt="Thruster tracking under wind">
+  <img src="docs/figures/tracking_anim.gif" width="95%" alt="Thruster tracking under wind">
 </p>
 
 <p align="center"><em>Thruster disturbance rejection using FBI feedforward.</em></p>
 
+### Swinging payload tracking: manifold degree comparison
+
+`example_swing_drone.py` solves a cable suspended payload problem. We can see the difference in performance between degrees 1, 2, 3, and 4. The higher degree manifolds capture more of the swing nonlinearity, so the payload rides closer to the reference.
+
+<p align="center">
+  <img src="docs/figures/payload_degree_compare.gif" width="48%" alt="Payload tracking at manifold degree 1, 2 and 3">
+  <img src="docs/figures/payload_degree_error.png" width="48%" alt="Payload tracking error by manifold degree">
+</p>
+
+<p align="center"><em>Reference load against the closed loop payload path at degree 1, 2, 3, and 4, and tracking error norm over one reference period.</em></p>
+
+| Degree | Setup [ms] | Warmup [ms] | Inference / step [ms] | Tracking RMS [m] |
+|:------:|:----------:|:-----------:|:---------------------:|:----------------:|
+| 1      |    0.99    |   518.06    |         0.321         |     4.12e-02     |
+| 2      |    2.40    |   919.48    |         0.815         |     4.97e-02     |
+| 3      |    6.61    |   2392.08   |         2.462         |     6.43e-03     |
+| 4      |    20.20   |   35635.61  |        16.915         |     3.46e-03     |
+
 ### World model learning with FBI
 
-`example_wm_fbi.py` closes the loop around a learned plant. The true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
+In `example_wm_fbi.py` the true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
 
 1. **Solve.** Taylor expand the current `f_hat` at the operating point and run the FBI solve to get the manifold `theta` and feedforward `lambda` for the learned model, plus a feedback gain by pole placement on its linearization.
 2. **Roll out.** Drive the true system in closed loop with feedforward plus feedback plus a decaying dither, and collect the on-policy transitions.
@@ -131,46 +153,11 @@ As the world model improves, the FBI solution computed on it approaches the one 
 
 <p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
 
-### Swinging payload tracking: manifold degree comparison
-
-`example_swing_drone.py` solves a cable suspended payload problem. We can see the difference in performance between degrees 1, 2, 3, and 4. The higher degree manifolds capture more of the swing nonlinearity, so the payload rides closer to the reference.
-
-<p align="center">
-  <img src="docs/figures/payload_degree_compare.gif" width="560" alt="Payload tracking at manifold degree 1, 2 and 3">
-</p>
-
-<p align="center"><em>Reference load against the closed loop payload path at degree 1, 2 and 3.</em></p>
-
-<p align="center">
-  <img src="docs/figures/payload_degree_error.png" width="560" alt="Payload tracking error by manifold degree">
-</p>
-
-<p align="center"><em>Payload tracking error norm over one reference period for each manifold degree.</em></p>
-
-| Degree | Setup [ms] | Warmup [ms] | Inference / step [ms] | Tracking RMS [m] |
-|:------:|:----------:|:-----------:|:---------------------:|:----------------:|
-| 1      |    0.94    |   525.79    |         0.312         |     4.12e-02     |
-| 2      |    2.40    |   964.75    |         0.808         |     4.97e-02     |
-| 3      |    6.59    |   2492.99   |         2.422         |     6.43e-03     |
-| 4      |    21.11   |   36709.43  |        17.090         |     3.46e-03     |
-
 ---
 
-## Solution Validation Against Original NST
+## Additional Information
 
-The solve is cross checked against the original MATLAB NST values when reference arrays are present (`test_fbi_jax.py`), and against the dense Kronecker reference for the decoupled kernels (`test_fbi_fast.py`). The FBI residual measures how well the truncated polynomial solution satisfies the regulator equations at the operating point.
-
-<p align="center">
-  <img src="docs/figures/matlab_error.png" width="840" alt="Relative error against the MATLAB reference">
-</p>
-
-<p align="center"><em>Per coefficient relative error of the float32 solve against the MATLAB NST reference.</em></p>
-
----
-
-# Additional Information
-
-## Background
+### Background
 
 The library targets the **output regulation** problem. A plant, an exosystem driving the reference, and an error output
 
@@ -199,27 +186,17 @@ Following NST, the FBIJAX component solves these equations by expanding `theta` 
   <em>(a) FBI solution (b) Fast FBI solution. A stale solve degrades as the state moves away, while re-solving at each point holds the error down.</em>
 </p>
 
----
+### Solution Validation Against Original NST
 
-## The solve pipeline
-
-Each operating point passes through three stages:
-
-1. **Taylor maps** (`taylor.py`) build JIT compiled coefficient maps for `f`, `h` and the exosystem, evaluated by forward mode differentiation. The maps are built once and reused; each call returns the packed graded coefficients of the field at the current operating point.
-2. **FBI solve** (`fbi.py` or `fbi_fast.py`) solves the regulator equations degree by degree and returns the packed `theta` and `lambda` coefficients. Degree one is the linear regulator; each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients through the polynomial algebra in `polylib.py`.
-3. **Inference** (`fbi_eval.py`) evaluates the manifold `theta(x_)` and the feedforward `lambda(x_)` on a batch of exosystem samples, reusing the cached evaluation kernel.
-
-After the first compiling call the warm path is the relevant timing, and the whole pipeline is cheap enough to refresh at every operating point in a moving loop.
+The solve is cross checked against the original MATLAB NST values when reference arrays are present (`test_fbi_jax.py`), and against the dense Kronecker reference for the decoupled kernels (`test_fbi_fast.py`). The FBI residual measures how well the truncated polynomial solution satisfies the regulator equations at the operating point.
 
 <p align="center">
-  <img src="docs/figures/pipeline.svg" width="880" alt="FBIJAX solve pipeline">
+  <img src="docs/figures/matlab_error.png" width="840" alt="Relative error against the MATLAB reference">
 </p>
 
-<p align="center"><em>The solve pipeline: Taylor maps, the degree by degree FBI solve, and batched inference, refreshed at each operating point.</em></p>
+<p align="center"><em>Per coefficient relative error of the float32 FBI solve against the MATLAB NST reference (original FBI).</em></p>
 
----
-
-## Dense `fbi` versus decoupled `fbi_fast`
+### Dense `fbi` versus decoupled `fbi_fast`
 
 At each degree `k` the regulator equation has the operator form
 
@@ -241,11 +218,9 @@ where `M` is the combined linear plant and output Jacobian, `Sel` selects the st
 
 <p align="center"><em>Warm solve time against problem size on a nilpotent family. The dense Kronecker solve overtakes the decoupled solve as the exosystem grows.</em></p>
 
----
+### Solvability screen
 
-## Solvability screen
-
-The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosystem eigenvalues (products, in the discrete case). The regulator equations are solvable when none of these coincide with a **transmission zero** of the `(M, Sel)` pencil. `solvability.py` and the `check` option in `fbi_fast` report, per degree, the gap between the operator spectrum and the transmission zeros, flagging resonant degrees and the structural regime (square, over or underdetermined). An overdetermined regime, where the error channel count exceeds the control count, is flagged as structurally infeasible; a resonant degree, where the gap falls below tolerance, signals a coincidence that makes the per degree solve singular.
+The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosystem eigenvalues (products, in the discrete case). The regulator equations are solvable when none of these coincide with a **transmission zero** of the `(M, Sel)` pencil. A `reporter.py` file computes per degree, the gap between the operator spectrum and the transmission zeros, flagging resonant degrees and the structural regime (square, over or underdetermined). An overdetermined regime, where the error channel count exceeds the control count, is flagged as structurally infeasible; a resonant degree, where the gap falls below tolerance, signals a coincidence that makes the per degree solve singular. Please invoke `verbose=True` in the wrapper to print the report.
 
 <p align="center">
   <img src="docs/figures/spectral_screen.png" width="560" alt="Solvability screen, spectrum versus transmission zeros">
@@ -257,9 +232,10 @@ The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosys
 
 ## References
 
-- A. Isidori and C. I. Byrnes, output regulation of nonlinear systems.
-- B. A. Francis, the linear multivariable regulator problem.
+- A. Isidori and C. I. Byrnes, Output regulation of nonlinear systems.
+- B. A. Francis, The linear multivariable regulator problem.
 - A. J. Krener, Nonlinear Systems Toolbox.
+- A. J. Krener, The construction of optimal linear and nonlinear regulators.
 
 ---
 

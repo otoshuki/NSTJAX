@@ -13,7 +13,7 @@ import scipy.linalg as sla
 from NSTJAX import NSTJAX
 
 #Loop params
-SAMPLES = 256         #Inference samples for the warm start
+SAMPLES = 2
 DT = 0.01             #Rollout step
 T_END = 12.566        #One closed 2:3 Lissajous period
 STEPS = int(T_END / DT)

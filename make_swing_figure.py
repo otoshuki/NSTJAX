@@ -15,7 +15,7 @@ from NSTJAX import NSTJAX
 from NSTJAX.NSTJAX_suite import build_taylor
 
 #Loop params
-SAMPLES = 256
+SAMPLES = 2
 DT = 0.01
 T_END = 12.566        #One closed 2:3 Lissajous period
 STEPS = int(T_END / DT)
@@ -138,7 +138,7 @@ def run_case(d, W, Kfb):
 
     #Warmup, warm_start rebuilds from cache and JIT compiles solve and inference
     t0 = time.perf_counter()
-    nst.warm_start(z0, x_0, samples=STEPS)
+    nst.warm_start(z0, x_0, samples=SAMPLES)
     jax.block_until_ready((nst.th, nst.la))
     t_warm = time.perf_counter() - t0
 

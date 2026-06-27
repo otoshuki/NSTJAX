@@ -18,7 +18,7 @@ STEPS = 900
 POLES = [-2.5, -3.5, -2.6, -3.6, -2.7, -3.7]
 
 #Loop params
-SAMPLES = 256
+SAMPLES = 2
 ITERS = 10
 SPREAD = 0.1
 
@@ -156,9 +156,7 @@ def make_outputs(xf, cf, wf, xb, nst):
     en_f = np.linalg.norm(xf[:, :3] - ref, axis=1)
     en_b = np.linalg.norm(xb[:, :3] - ref, axis=1)
     wind = wf[:, 2:4] @ Gn.T
-    sp = np.sum(wind**2, axis=1, keepdims=True)
-    rv = np.stack([om_r * wf[:, 1], -om_r * wf[:, 0]], axis=1) @ Rn.T
-    dforce = k_f * wind + (c_d / mass) * np.sum((rv - wind)**2, axis=1, keepdims=True) * (rv - wind)
+    dforce = k_f * wind
 
     #Reference loop for context
     tt = np.linspace(0, 2 * np.pi / om_r, 300)
