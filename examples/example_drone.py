@@ -1,6 +1,6 @@
 """
 Author: gpertin, KAIST
-High level NSTJAX example: drone tracking
+NSTJAX example: drone tracking
 """
 
 import time

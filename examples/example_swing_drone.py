@@ -1,6 +1,6 @@
 """
 Author: gpertin, KAIST
-High level NSTJAX example: planar drone with a cable suspended payload, load trajectory tracking
+NSTJAX example: planar drone with a cable suspended payload, load trajectory tracking
 """
 
 import time

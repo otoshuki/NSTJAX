@@ -1,6 +1,6 @@
 """
 Author: gpertin, KAIST
-High level NSTJAX example: pendulum tracking
+NSTJAX example: pendulum tracking
 """
 
 import time

@@ -106,6 +106,15 @@ The repository ships runnable examples for a drone and a controlled pendulum, at
 
 <p align="center"><em>Pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
 
+### Periodic disturbance rejection for thruster
+`example_thruster.py` considers a thruster with period wind disturbance and compares the performance between feedback only and feedback+FBI feedforward case. The RMSE reduces by 129x (from 1.991e-01 to 1.536e-03) while taking only 0.966 ms for the entire FBI+inference computation at 256 samples per step.
+
+<p align="center">
+  <img src="docs/figures/tracking_anim.gif" width="560" alt="Thruster tracking under wind">
+</p>
+
+<p align="center"><em>Thruster disturbance rejection using FBI feedforward.</em></p>
+
 ### World model learning with FBI
 
 `example_wm_fbi.py` closes the loop around a learned plant. The true pendulum is unknown; the controller starts from a deliberately wrong nominal prior and corrects it with a neural residual, a neural-ODE world model `f_hat(x, u) = f_nominal(x, u) + MLP(x, u)`. Each round runs the same three steps:
@@ -122,7 +131,7 @@ As the world model improves, the FBI solution computed on it approaches the one 
 
 <p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
 
-### Manifold degree comparison for swinging payload tracking
+### Swinging payload tracking: manifold degree comparison
 
 `example_swing_drone.py` solves a cable suspended payload problem. We can see the difference in performance between degrees 1, 2, 3, and 4. The higher degree manifolds capture more of the swing nonlinearity, so the payload rides closer to the reference.
 
@@ -137,6 +146,13 @@ As the world model improves, the FBI solution computed on it approaches the one 
 </p>
 
 <p align="center"><em>Payload tracking error norm over one reference period for each manifold degree.</em></p>
+
+| Degree | Setup [ms] | Warmup [ms] | Inference / step [ms] | Tracking RMS [m] |
+|:------:|:----------:|:-----------:|:---------------------:|:----------------:|
+| 1      |    0.94    |   525.79    |         0.312         |     4.12e-02     |
+| 2      |    2.40    |   964.75    |         0.808         |     4.97e-02     |
+| 3      |    6.59    |   2492.99   |         2.422         |     6.43e-03     |
+| 4      |    21.11   |   36709.43  |        17.090         |     3.46e-03     |
 
 ---
 
