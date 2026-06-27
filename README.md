@@ -81,13 +81,16 @@ The auto solver routes small systems to the dense solve and large ones to the de
 
 ## Performance
 
-After warmup the full step, coefficients, solve and inference together, runs at about 12 ms for the drone system with its six derivative exosystem (10 states, 24 exostates, 4 inputs, 4 outputs). This is performed on a laptop with Ryzen 7 8845hs CPU, 32GB RAM, and NVIDIA GeForce RTX 4060 Laptop with 8GB VRAM.
+After warmup the full step, coefficients, solve and inference together, runs at about 12 ms for the drone system with its six derivative exosystem (10 states, 24 exostates, 4 inputs, 4 outputs). On the smaller pendulum system (2 states, 3 exostates, 1 input, 1 output), it takes approx 0.5ms. This is performed on a laptop with Ryzen 7 8845hs CPU, 32GB RAM, and NVIDIA GeForce RTX 4060 Laptop with 8GB VRAM.
 
 <p align="center">
-  <img src="docs/figures/timing_breakdown.png" width="840" alt="Per step timing breakdown and inference throughput">
+  <img src="docs/figures/timing_breakdown2.png" width="840" alt="Per step timing breakdown and inference throughput for pendulum system">
+  <img src="docs/figures/timing_breakdown.png" width="840" alt="Per step timing breakdown and inference throughput for drone system">
 </p>
 
-<p align="center"><em>Per step cost split into coefficients, FBI solve and inference, with inference throughput against batch size.</em></p>
+<p align="center">
+  <em>Per step cost split into coefficients, FBI solve and inference, with inference throughput against batch size. (a) Pendulum, (b) Drone</em>
+</p>
 
 ---
 

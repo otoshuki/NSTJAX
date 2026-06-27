@@ -1,6 +1,6 @@
 """
 Author: gpertin, KAIST
-High level NSTJAX example: double pendulum tracking
+High level NSTJAX example: pendulum tracking
 """
 
 import time
@@ -15,7 +15,7 @@ ITERS = 10            #Timed steps
 SPREAD = 0.2          #How far the operating point wanders each step
 W_SPREAD = 0.2        #Spread of the exosystem inference samples
 
-#System Design: Double pendulum tracking problem
+#System Design: pendulum tracking problem
 d = 3
 g = 9.81
 l = 1.0

@@ -256,7 +256,7 @@ def fig_residual_vs_distance():
 
 #Figure 4, solver time versus problem size on one nilpotent family
 def fig_solver_crossover():
-    n_list = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22]
+    n_list = [4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30]
     d = 2
     kd, t_fbi, t_fast = [], [], []
     for n_ in n_list:
@@ -390,6 +390,66 @@ def fig_timing_breakdown():
     a2.grid(alpha=0.3)
     save("timing_breakdown.png")
 
+def fig_timing_breakdown2():
+    s = build_pendulum()
+    tay_f = build_taylor(s.fsys, s.nsum, s.d)
+    tay_h = build_taylor(s.hsys, s.nsum, s.d)
+    tay_e = build_taylor(s.fexo, s.n_, s.d)
+
+    f = tay_f(s.z0); h = tay_h(s.z0); fe = tay_e(s.x_0)
+    th, la = fbi(f, h, fe, s.n, s.m, s.p, s.n_, s.d)
+    th = jnp.reshape(th, (s.n, -1)); la = jnp.reshape(la, (s.m, -1))
+    SAMPLES = 256
+    W = 0.2 * jax.random.normal(jax.random.PRNGKey(0), (SAMPLES, s.n_))
+    jax.block_until_ready((compute_theta(th, W, s.d), compute_lambda(la, W, s.d)))
+
+    iters = 8
+    tc = np.zeros(iters); ts = np.zeros(iters); ti = np.zeros(iters)
+    for i in range(iters):
+        t0 = time.perf_counter()
+        f = tay_f(s.z0); h = tay_h(s.z0); fe = tay_e(s.x_0)
+        jax.block_until_ready((f, h, fe))
+        t1 = time.perf_counter()
+        th, la = fbi(f, h, fe, s.n, s.m, s.p, s.n_, s.d)
+        th = jnp.reshape(th, (s.n, -1)); la = jnp.reshape(la, (s.m, -1))
+        jax.block_until_ready((th, la))
+        t2 = time.perf_counter()
+        pi = compute_theta(th, W, s.d); c = compute_lambda(la, W, s.d)
+        jax.block_until_ready((pi, c))
+        t3 = time.perf_counter()
+        tc[i] = t1 - t0; ts[i] = t2 - t1; ti[i] = t3 - t2
+    sl = slice(1, iters)
+    seg = np.array([tc[sl].mean(), ts[sl].mean(), ti[sl].mean()]) * 1e3
+
+    batches = [64, 128, 256, 512, 1024]
+    thr = []
+    for B in batches:
+        Wb = 0.2 * jax.random.normal(jax.random.PRNGKey(B), (B, s.n_))
+        jax.block_until_ready(compute_theta(th, Wb, s.d))
+        t = time.perf_counter()
+        for _ in range(20):
+            out = compute_theta(th, Wb, s.d)
+        jax.block_until_ready(out)
+        dt = (time.perf_counter() - t) / 20
+        thr.append(B / dt)
+
+    fig, (a1, a2) = plt.subplots(1, 2, figsize=(11, 4.2))
+    names = ["coeffs", "fbi", "infer"]
+    colors = ["#60a5fa", "#2563eb", "#1e3a8a"]
+    bottom = 0.0
+    for v, nm, col in zip(seg, names, colors):
+        a1.bar(0, v, width=0.6, bottom=bottom, color=col, label=f"{nm}  {v:.2f} ms")
+        bottom += v
+    a1.set_xlim(-1, 1)
+    a1.set_xticks([]); a1.set_ylabel("ms per step")
+    a1.set_title(f"Per step cost, total {bottom:.2f} ms")
+    a1.legend()
+    a2.plot(batches, np.asarray(thr) / 1e6, "-o", color="#2563eb")
+    a2.set_xlabel("batch size"); a2.set_ylabel("million samples / s")
+    a2.set_title("Inference throughput")
+    a2.grid(alpha=0.3)
+    save("timing_breakdown2.png")
+
 #Figure 7, pendulum nominal phase portrait
 def fig_pendulum_phase():
     s = build_pendulum()
@@ -444,8 +504,8 @@ def fig_matlab_error():
 def main():
     os.makedirs(OUTDIR, exist_ok=True)
     figs = [fig_drone_trajectory, fig_residual_vs_distance, fig_solver_crossover,
-            fig_spectral_screen, fig_timing_breakdown, fig_pendulum_phase,
-            fig_matlab_error]
+            fig_spectral_screen, fig_timing_breakdown, fig_timing_breakdown2,
+            fig_pendulum_phase, fig_matlab_error]
     for fn in figs:
         print(fn.__name__)
         try:

@@ -1,6 +1,6 @@
 """
 Author: gpertin, KAIST
-Minimal JAX FBI example: double pendulum tracking, timed FBI + inference loop
+Minimal JAX FBI example: pendulum tracking, timed FBI + inference loop
 """
 
 import time
@@ -16,7 +16,7 @@ WARM = 3              #Warmup steps (trigger compilation)
 SPREAD = 0.2          #How far the operating point wanders each step
 W_SPREAD = 0.2        #Spread of the exosystem inference samples
 
-#System Design: Double pendulum tracking problem
+#System Design: pendulum tracking problem
 d = 3
 g = 9.81
 l = 1.0
