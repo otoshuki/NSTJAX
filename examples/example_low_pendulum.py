@@ -7,9 +7,7 @@ import time
 import numpy as np
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.fbi import fbi
-from NSTJAX.NSTJAX_suite.taylor import build_taylor
-from NSTJAX.NSTJAX_suite.fbi_eval import compute_theta, compute_lambda
+from NSTJAX.NSTJAX_suite import fbi, build_taylor, compute_theta, compute_lambda
 
 #Loop params
 SAMPLES = 256         #Inference samples per step

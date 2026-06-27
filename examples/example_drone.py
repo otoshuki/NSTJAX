@@ -7,7 +7,7 @@ import time
 import numpy as np
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
+from NSTJAX import NSTJAX
 
 #Loop params
 SAMPLES = 256         #Inference samples per step
@@ -16,7 +16,7 @@ SPREAD = 0.2          #How far the operating point wanders each step
 W_SPREAD = 0.2        #Spread of the exosystem inference samples
 
 #System Design: Drone tracking problem
-d = 3
+d = 2
 g = 9.81
 alp = 0.4
 n = 10

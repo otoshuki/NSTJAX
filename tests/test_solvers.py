@@ -4,7 +4,7 @@ Check the unified FBI report matches across the dense and fast solvers
 """
 
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
+from NSTJAX import NSTJAX
 
 #Drone tracking, degree 2
 d = 2

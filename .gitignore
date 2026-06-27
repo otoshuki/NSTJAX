@@ -1,1 +1,3 @@
 NST_MATLAB/
+__pycache__/
+*.egg-info/

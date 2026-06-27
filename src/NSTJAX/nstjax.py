@@ -10,6 +10,7 @@ from NSTJAX.NSTJAX_suite.taylor import build_taylor
 from NSTJAX.NSTJAX_suite.fbi import fbi
 from NSTJAX.NSTJAX_suite.fbi_fast import FBIFast
 from NSTJAX.NSTJAX_suite.reporter import build_report
+from NSTJAX.NSTJAX_bridge.nst_encoder import encode_to_reduced
 from NSTJAX.NSTJAX_suite.fbi_eval import (compute_theta as _eval_theta,
                                           compute_lambda as _eval_lambda)
 
@@ -114,3 +115,11 @@ class NSTJAX:
     def compute_lambda(self, W, la=None):
         la = self.la if la is None else la
         return _eval_lambda(la, W, self.d)
+
+    def encode_matlab(self, svlth=None):
+        #Reduced MATLAB ordering of the stored manifold and feedforward
+        if self.th is None or self.la is None:
+            raise RuntimeError("solve first via warm_start or compute_fbi")
+        th = encode_to_reduced(self.th, self.n_, self.d, svlth)
+        la = encode_to_reduced(self.la, self.n_, self.d, svlth)
+        return th, la

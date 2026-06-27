@@ -7,7 +7,7 @@ import time
 import numpy as np
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
+from NSTJAX import NSTJAX
 
 #Loop params
 SAMPLES = 256         #Inference samples per step

@@ -13,16 +13,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
-
+from NSTJAX import NSTJAX
 import NSTJAX.NSTJAX_suite.polylib as P
-from NSTJAX.NSTJAX_suite.polylib import crd
-from NSTJAX.NSTJAX_suite.nstjax import NSTJAX
-from NSTJAX.NSTJAX_suite.taylor import build_taylor
-from NSTJAX.NSTJAX_suite.fbi import fbi
-from NSTJAX.NSTJAX_suite.fbi_fast import FBIFast
-from NSTJAX.NSTJAX_suite.fbi_eval import compute_theta, compute_lambda
-from NSTJAX.NSTJAX_suite.decouple import schur_form, operator_eigs
-from NSTJAX.NSTJAX_suite.solvability import transmission_zeros
+from NSTJAX.NSTJAX_suite import fbi, crd, build_taylor, FBIFast, compute_theta, compute_lambda, schur_form, operator_eigs, transmission_zeros
 
 OUTDIR = "docs/figures"
 DPI = 150
@@ -424,7 +417,7 @@ def fig_pendulum_phase():
 
 #Figure 8, error against the MATLAB reference, optional
 def fig_matlab_error():
-    need = ["examples/x_test_batch.npy", "examples/th_val_mat.npy", "examples/la_val_mat.npy"]
+    need = ["tests/x_test_batch.npy", "tests/th_val_mat.npy", "tests/la_val_mat.npy"]
     if not all(os.path.exists(f) for f in need):
         print("  skip matlab_error: reference arrays not found")
         return
@@ -432,8 +425,8 @@ def fig_matlab_error():
     nst = NSTJAX(s.fsys, s.fexo, s.hsys, s.n, s.m, s.p, s.n_, s.d, store=True)
     nst.warm_start(s.z0, s.x_0, samples=1)
     th, la = nst.compute_fbi(s.z0, s.x_0)
-    Xm = jnp.asarray(np.load("examples/x_test_batch.npy"))
-    th_ref = np.load("examples/th_val_mat.npy"); la_ref = np.load("examples/la_val_mat.npy")
+    Xm = jnp.asarray(np.load("tests/x_test_batch.npy"))
+    th_ref = np.load("tests/th_val_mat.npy"); la_ref = np.load("tests/la_val_mat.npy")
     tv = np.asarray(compute_theta(th, Xm, s.d))
     lv = np.asarray(compute_lambda(la, Xm, s.d))
     eth = np.abs(tv - th_ref) / (np.max(np.abs(th_ref)) + 1e-30)

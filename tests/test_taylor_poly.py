@@ -8,7 +8,7 @@ import time
 import numpy as np
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.taylor import build_taylor, build_taylor_batch, precompile
+from NSTJAX.NSTJAX_suite import build_taylor, build_taylor_batch, precompile
 
 #System Design: Drone tracking problem
 d = 3 #This example works for higher degrees

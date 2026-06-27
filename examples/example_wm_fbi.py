@@ -8,9 +8,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import scipy.signal as sig
-from NSTJAX.NSTJAX_suite.taylor import build_taylor
-from NSTJAX.NSTJAX_suite.fbi import fbi
-from NSTJAX.NSTJAX_suite.fbi_eval import compute_theta, compute_lambda
+from NSTJAX.NSTJAX_suite import build_taylor, fbi, compute_theta, compute_lambda
 
 #System dimensions, pendulum tracking, degree 2
 d = 2

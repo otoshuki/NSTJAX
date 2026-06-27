@@ -11,10 +11,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 import NSTJAX.NSTJAX_suite.polylib as P
-from NSTJAX.NSTJAX_suite.fbi import fbi
-# from NSTJAX.NSTJAX_suite.fbi_fast import FBIFast
-from NSTJAX.NSTJAX_suite.taylor import build_taylor, build_taylor_batch, precompile
-from NSTJAX.NSTJAX_suite.fbi_eval import compute_theta, compute_lambda
+from NSTJAX.NSTJAX_suite import fbi, build_taylor, build_taylor_batch, precompile, compute_theta, compute_lambda
 
 #Test params
 SAMPLES = 256         #Inference samples per iteration
