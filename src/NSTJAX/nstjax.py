@@ -18,7 +18,8 @@ class NSTJAX:
     #User provides the system, then warm starts, then solves at any operating point
     def __init__(self, fsys, fexo, hsys, n, m, p, n_, d,
                  solver="auto", fixed=True, branch="auto", check="off",
-                 auto_threshold=20e2, reshape=True, store=True, verbose=False):
+                 auto_threshold=20e2, reshape=True, store=True, verbose=False,
+                 disc=False):
         self.fsys, self.fexo, self.hsys = fsys, fexo, hsys
         self.n, self.m, self.p, self.n_, self.d = n, m, p, n_, d
         self.nsum = n + m + n_
@@ -29,6 +30,7 @@ class NSTJAX:
         self.fixed = fixed
         self.branch = branch
         self.check = check
+        self.disc = disc
         #Output options
         self.reshape = reshape
         self.store = store
@@ -51,7 +53,8 @@ class NSTJAX:
             use_fast = (self.solver == "fbi_fast")
         if use_fast:
             self._fast = FBIFast(self.n, self.m, self.p, self.n_, self.d,
-                                 fixed=self.fixed, check="off", branch=self.branch)
+                                 fixed=self.fixed, check="off", branch=self.branch,
+                                 disc=self.disc)
             self.solver_name = "fbi_fast"
         else:
             self._fast = None
@@ -61,7 +64,7 @@ class NSTJAX:
         if self._fast is not None:
             th, la, _ = self._fast.solve(f, h, fe)
             return th, la
-        th, la = fbi(f, h, fe, self.n, self.m, self.p, self.n_, self.d)
+        th, la = fbi(f, h, fe, self.n, self.m, self.p, self.n_, self.d, self.disc)
         return th, la
 
     def warm_start(self, z0=None, x_0=None, warm_reps=2, samples=1):
@@ -101,7 +104,7 @@ class NSTJAX:
             self.report = self._rep_cache
         else:
             self.report = build_report(f, h, fe, self.n, self.m,
-                                       self.p, self.n_, self.d, self.check)
+                                       self.p, self.n_, self.d, self.check, self.disc)
             if self.check == "setup":
                 self._rep_cache = self.report
         if self.store:

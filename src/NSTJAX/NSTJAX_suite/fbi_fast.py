@@ -8,7 +8,7 @@ import numpy as np
 import scipy.linalg as sla
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.polylib import unpack, zero_field, compose, ddmul, lie_operator
+from NSTJAX.NSTJAX_suite.polylib import unpack, zero_field, compose, ddmul, lie_operator, comp_operator
 from NSTJAX.NSTJAX_suite.reporter import screen
 
 #Relative tolerance for a vanished lie power
@@ -63,12 +63,13 @@ def _solve_general(M_, Sel, RHS, Z, R):
 
 class FBIFast:
     #Decoupled FBI solver, fixed reuses the factorization, check guards solvability
-    def __init__(self, n, m, p, n_, d, fixed=True, check="off", branch="auto"):
+    def __init__(self, n, m, p, n_, d, fixed=True, check="off", branch="auto", disc=False):
         self.n, self.m, self.p, self.n_, self.d = n, m, p, n_, d
         self.nsum = n + m + n_
         self.fixed = fixed
         self.check = check
         self.branch = branch
+        self.disc = disc
         self._dec = None
         self._mu = None
         self._rep = None
@@ -84,7 +85,8 @@ class FBIFast:
         Aj = jnp.asarray(A_)
         dec = []
         for k in range(1, d + 1):
-            LF = np.asarray(lie_operator(Aj, n_, k), dtype=np.float32)
+            op = comp_operator(Aj, n_, k) if self.disc else lie_operator(Aj, n_, k)
+            LF = np.asarray(op, dtype=np.float32)
             if use_nil:
                 dec.append((True, jnp.asarray(LF), _nil_index(LF), None))
             else:
@@ -105,7 +107,7 @@ class FBIFast:
             rep["branch"] = branch
             return rep
         rep = screen(np.asarray(M_), np.asarray(Sel), mu,
-                     self.n_, self.d, self.p, self.m)
+                     self.n_, self.d, self.p, self.m, self.disc)
         rep["checked"] = True
         rep["branch"] = branch
         if self.check == "setup":
@@ -143,7 +145,8 @@ class FBIFast:
         for k in range(2, d + 1):
             th_field = unpack(th, n_, 1, k - 1)
             la_field = unpack(la, n_, 1, k - 1)
-            deriv = ddmul(th_field, fexo_field, n_, k)[k]
+            deriv = (compose(th_field, n_, fexo_field, n_, k)[k] if self.disc
+                     else ddmul(th_field, fexo_field, n_, k)[k])
             data_hi = zero_field(n + p, nsum, k, dtype=dt)
             for kk in range(2, k + 1):
                 data_hi[kk] = fh_field[kk]

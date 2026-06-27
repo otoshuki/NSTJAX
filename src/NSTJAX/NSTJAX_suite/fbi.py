@@ -7,7 +7,7 @@ Based on Krener's Nonlinear Systems Toolbox
 from functools import partial
 import jax
 import jax.numpy as jnp
-from NSTJAX.NSTJAX_suite.polylib import crd, unpack, zero_field, compose, ddmul, lie_operator
+from NSTJAX.NSTJAX_suite.polylib import crd, unpack, zero_field, compose, ddmul, lie_operator, comp_operator
 
 def _vec(X):
     #Column major vectorization
@@ -32,8 +32,8 @@ def _operator(M_, Sel, LF):
     return jnp.kron(eye, M_) - jnp.kron(LF.T, Sel)
 
 #Partial compiled to improve speed
-@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7))
-def fbi(f, h, fexo, n, m, p, n_, d):
+@partial(jax.jit, static_argnums=(3, 4, 5, 6, 7, 8))
+def fbi(f, h, fexo, n, m, p, n_, d, disc=False):
     nsum = n + m + n_
     dt = f.dtype
     #Linear parts
@@ -59,12 +59,13 @@ def fbi(f, h, fexo, n, m, p, n_, d):
     fexo_field = unpack(fexo, n_, 1, d)
     for k in range(2, d + 1):
         n_k = crd(n_, k)
-        LF = lie_operator(A_, n_, k)
+        LF = comp_operator(A_, n_, k) if disc else lie_operator(A_, n_, k)
         Op = _operator(M_, Sel, LF)
-        #Term 1, the derivative cross term (d th / d x_) F_ to degree k
+        #Term 1, composition cross term (discrete) or derivative cross term (continuous)
         th_field = unpack(th, n_, 1, k - 1)
         la_field = unpack(la, n_, 1, k - 1)
-        deriv = ddmul(th_field, fexo_field, n_, k)[k]
+        deriv = (compose(th_field, n_, fexo_field, n_, k)[k] if disc
+                 else ddmul(th_field, fexo_field, n_, k)[k])
         #Term 2, the nonlinear part of [f; h] composed with (th, la, x_)
         data_hi = zero_field(n + p, nsum, k, dtype=dt)
         for kk in range(2, k + 1):

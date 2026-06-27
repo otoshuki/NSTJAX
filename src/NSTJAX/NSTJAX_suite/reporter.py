@@ -12,12 +12,15 @@ RES_TOL = 1e-3
 #Threshold on beta for an eigenvalue to count as finite
 FIN_TOL = 1e-6
 
-def operator_eigs(mu, n_, k):
-    #Eigenvalues of the degree k lie operator, sum_i alpha_i mu_i
+def operator_eigs(mu, n_, k, disc=False):
+    #Spectrum of the degree k operator, products mu^alpha (discrete) or sums alpha.mu
     out = []
     for combo in combinations_with_replacement(range(n_), k):
         alpha = np.bincount(combo, minlength=n_)
-        out.append(complex(np.dot(alpha, mu)))
+        if disc:
+            out.append(complex(np.prod(mu.astype(np.complex128) ** alpha)))
+        else:
+            out.append(complex(np.dot(alpha, mu)))
     return np.asarray(out, dtype=np.complex64)
 
 def transmission_zeros(M_, Sel):
@@ -32,7 +35,7 @@ def transmission_zeros(M_, Sel):
     zeros = (alpha[fin] / beta[fin]).astype(np.complex64)
     return zeros, True
 
-def screen(M_, Sel, mu, n_, d, p, m):
+def screen(M_, Sel, mu, n_, d, p, m, disc=False):
     #Per degree resonance report against the transmission zeros
     report = {}
     #Structural feasibility from the control vs error channel count
@@ -43,7 +46,7 @@ def screen(M_, Sel, mu, n_, d, p, m):
     zscale = float(np.max(np.abs(zeros))) + 1.0 if zeros.size else 1.0
     degrees = {}
     for k in range(1, d + 1):
-        lam = operator_eigs(mu, n_, k)
+        lam = operator_eigs(mu, n_, k, disc)
         if zeros.size and square:
             gap = np.min(np.abs(lam[:, None] - zeros[None, :]), axis=1)
         else:
@@ -71,13 +74,13 @@ def _linear_data(f, h, fe, n, m, p, n_):
     mu = np.linalg.eigvals(A_).astype(np.complex64)
     return M_, Sel, mu
 
-def build_report(f, h, fe, n, m, p, n_, d, check="off"):
+def build_report(f, h, fe, n, m, p, n_, d, check="off", disc=False):
     #Solver agnostic report from the taylor coefficients
     regime = ("overdetermined" if p > m else
               "underdetermined" if m > p else "square")
     if check == "off":
         return {"regime": regime, "checked": False}
     M_, Sel, mu = _linear_data(f, h, fe, n, m, p, n_)
-    rep = screen(M_, Sel, mu, n_, d, p, m)
+    rep = screen(M_, Sel, mu, n_, d, p, m, disc)
     rep["checked"] = True
     return rep

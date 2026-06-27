@@ -350,3 +350,14 @@ def lie_operator(A, n, k):
     fl = _flatlen(n, k)
     H_flat = _ddmul_exec(F_flat, G1d, fpos, gpos, opos, scale, fl)
     return _unpack_full(H_flat, n, k)[k]
+
+def comp_operator(A, n, k):
+    #Matrix of p -> p(A x) on the degree k monomial basis
+    A = jnp.asarray(A)
+    dt = A.dtype
+    Mk = crd(n, k)
+    F = [jnp.zeros((Mk, crd(n, kk)), dt) for kk in range(k + 1)]
+    F[k] = jnp.eye(Mk, dtype=dt)
+    G = [jnp.zeros((n, crd(n, kk)), dt) for kk in range(k + 1)]
+    G[1] = A
+    return compose(F, n, G, n, k)[k]

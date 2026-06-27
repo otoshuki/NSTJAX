@@ -40,6 +40,8 @@ This solution is a **local polynomial approximation** built from a Taylor expans
 
 <p align="center"><em>Nominal flight path produced by rolling the exosystem through the tracking manifold theta, with the feedforward lambda along the trajectory.</em></p>
 
+Both continuous and discrete time plants are supported. For the discrete case (`disc=True`), the manifold is held invariant by a composition $\theta(\bar{f}(\bar{x}))$ instead of a derivative, and the per degree operator spectrum becomes products of the exosystem eigenvalues rather than sums.
+
 ---
 
 ## Quickstart
@@ -96,13 +98,13 @@ After warmup the full step, coefficients, solve and inference together, runs at 
 
 ## Examples
 
-The repository ships runnable examples for a drone and a double pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
+The repository ships runnable examples for a drone and a controlled pendulum, at the high level `NSTJAX` interface and a lower level direct solve, plus a world model example that learns the plant online and re-solves FBI on it.
 
 <p align="center">
-  <img src="docs/figures/pendulum_phase.png" width="840" alt="Double pendulum nominal manifold and tracking">
+  <img src="docs/figures/pendulum_phase.png" width="840" alt="Pendulum nominal manifold and tracking">
 </p>
 
-<p align="center"><em>Double pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
+<p align="center"><em>Pendulum: the nominal manifold phase portrait, and the reference tracked on the manifold.</em></p>
 
 ### World model learning with FBI
 
@@ -146,7 +148,13 @@ are given, and the goal is to drive the error to zero. The Francis Byrnes Isidor
 
 $$f(\theta(\bar{x}),\lambda(\bar{x})) = \frac{\partial \theta}{\partial \bar{x}}(\bar{x})\bar{f}(\bar{x}) \qquad h(\theta(\bar{x}),\bar{x},\lambda(\bar{x})) = 0.$$
 
-The first equation makes the manifold invariant under the combined flow, the second makes the output error vanish on it.
+The first equation makes the manifold invariant under the combined flow, the second makes the output vanish on it.
+
+The same machinery solves the **discrete time** problem, a plant $x^+ = f(x,u,\bar{x})$ driven by a discrete exosystem $\bar{x}^+ = \bar{f}(\bar{x})$. Here invariance is a composition rather than a derivative: stepping the manifold forward must land on the manifold at the next exosystem state,
+
+$$f(\theta(\bar{x}),\lambda(\bar{x}),\bar{x}) = \theta(\bar{f}(\bar{x})), \qquad h(\theta(\bar{x}),\bar{x},\lambda(\bar{x})) = 0.$$
+
+The degree by degree solve is unchanged in structure. The left operator now uses the composition
 
 Following NST, the FBIJAX component solves these equations by expanding `theta` and `lambda` as truncated polynomial series in `x_` and matching coefficients degree by degree. Degree one is the linear regulator (a Sylvester type system); each higher degree reuses the same left operator with a right hand side assembled from the lower degree coefficients. Because the expansion is taken around an operating point, the result is a local model, valid in a neighborhood. Recomputing it at each operating point keeps that neighborhood centered on the current state.
 
@@ -205,7 +213,7 @@ where `M` is the combined linear plant and output Jacobian, `Sel` selects the st
 
 ## Solvability screen
 
-The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosystem eigenvalues. The regulator equations are solvable when none of these coincide with a **transmission zero** of the `(M, Sel)` pencil. `solvability.py` and the `check` option in `fbi_fast` report, per degree, the gap between the operator spectrum and the transmission zeros, flagging resonant degrees and the structural regime (square, over or underdetermined). An overdetermined regime, where the error channel count exceeds the control count, is flagged as structurally infeasible; a resonant degree, where the gap falls below tolerance, signals a coincidence that makes the per degree solve singular.
+The Lie operator eigenvalues at degree `k` are the degree `k` sums of the exosystem eigenvalues (products, in the discrete case). The regulator equations are solvable when none of these coincide with a **transmission zero** of the `(M, Sel)` pencil. `solvability.py` and the `check` option in `fbi_fast` report, per degree, the gap between the operator spectrum and the transmission zeros, flagging resonant degrees and the structural regime (square, over or underdetermined). An overdetermined regime, where the error channel count exceeds the control count, is flagged as structurally infeasible; a resonant degree, where the gap falls below tolerance, signals a coincidence that makes the per degree solve singular.
 
 <p align="center">
   <img src="docs/figures/spectral_screen.png" width="560" alt="Solvability screen, spectrum versus transmission zeros">
