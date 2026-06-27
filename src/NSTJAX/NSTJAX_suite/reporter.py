@@ -1,16 +1,24 @@
 """
 Author: gpertin, KAIST
-FBI solvability screen via transmission zeros
+FBI solvability report via transmission zeros
 """
 
 import numpy as np
 import scipy.linalg as sla
-from NSTJAX.NSTJAX_suite.decouple import operator_eigs
+from itertools import combinations_with_replacement
 
 #Threshold below which a finite pencil eigenvalue counts as a zero coincidence
 RES_TOL = 1e-3
 #Threshold on beta for an eigenvalue to count as finite
 FIN_TOL = 1e-6
+
+def operator_eigs(mu, n_, k):
+    #Eigenvalues of the degree k lie operator, sum_i alpha_i mu_i
+    out = []
+    for combo in combinations_with_replacement(range(n_), k):
+        alpha = np.bincount(combo, minlength=n_)
+        out.append(complex(np.dot(alpha, mu)))
+    return np.asarray(out, dtype=np.complex64)
 
 def transmission_zeros(M_, Sel):
     #Finite generalized eigenvalues of the pencil (M_, Sel)
@@ -47,4 +55,29 @@ def screen(M_, Sel, mu, n_, d, p, m):
                       "worst_lambda": complex(lam[worst])}
     report["degrees"] = degrees
     report["resonant"] = any(v["resonant"] for v in degrees.values())
+    report["solvable"] = (report["regime"] != "overdetermined") and not report["resonant"]
     return report
+
+def _linear_data(f, h, fe, n, m, p, n_):
+    #Rebuild the degree 1 pencil (M_, Sel) and the exosystem spectrum
+    nsum = n + m + n_
+    F1 = np.asarray(f[:, :nsum], dtype=np.float64)
+    H1 = np.asarray(h[:, :nsum], dtype=np.float64)
+    M_ = np.block([[F1[:, :n], F1[:, n:n + m]],
+                   [H1[:, :n], H1[:, n:n + m]]])
+    Sel = np.zeros((n + p, n + m), dtype=np.float64)
+    Sel[:n, :n] = np.eye(n)
+    A_ = np.asarray(fe[:, :n_], dtype=np.float64)
+    mu = np.linalg.eigvals(A_).astype(np.complex64)
+    return M_, Sel, mu
+
+def build_report(f, h, fe, n, m, p, n_, d, check="off"):
+    #Solver agnostic report from the taylor coefficients
+    regime = ("overdetermined" if p > m else
+              "underdetermined" if m > p else "square")
+    if check == "off":
+        return {"regime": regime, "checked": False}
+    M_, Sel, mu = _linear_data(f, h, fe, n, m, p, n_)
+    rep = screen(M_, Sel, mu, n_, d, p, m)
+    rep["checked"] = True
+    return rep

@@ -9,14 +9,19 @@ import scipy.linalg as sla
 import jax
 import jax.numpy as jnp
 from NSTJAX.NSTJAX_suite.polylib import unpack, zero_field, compose, ddmul, lie_operator
-from NSTJAX.NSTJAX_suite.decouple import schur_form, operator_eigs
+from NSTJAX.NSTJAX_suite.reporter import screen
 
 #Relative tolerance for a vanished lie power
 NIL_TOL = 1e-5
-#Threshold below which a mode counts as resonant with a transmission zero
-RES_TOL = 1e-3
-#Threshold on beta for a finite pencil eigenvalue
-FIN_TOL = 1e-6
+
+def schur_form(A):
+    #Real schur factorization A = Q T Q^T of the exosystem linear part
+    A = np.asarray(A, dtype=np.float32)
+    T, Q = sla.schur(A, output="real")
+    mu = np.linalg.eigvals(A).astype(np.complex64)
+    scale = float(np.max(np.abs(A))) + 1e-30
+    nil = bool(np.max(np.abs(mu)) < NIL_TOL * scale)
+    return Q.astype(np.float32), T.astype(np.float32), mu, nil
 
 def _nil_index(LF):
     #Smallest power at which the nilpotent lie operator vanishes
@@ -55,36 +60,6 @@ def _solve_general(M_, Sel, RHS, Z, R):
     W_t = jax.lax.fori_loop(0, n_k, body,
                             jnp.zeros((M_.shape[1], n_k), Z.dtype))
     return jnp.real(W_t @ jnp.conj(Z).T).astype(M_.dtype)
-
-def _transmission_zeros(M_, Sel):
-    #Finite generalized eigenvalues of the pencil (M_, Sel)
-    M_ = np.asarray(M_, dtype=np.float64)
-    Sel = np.asarray(Sel, dtype=np.float64)
-    if M_.shape[0] != M_.shape[1]:
-        return np.zeros(0, dtype=np.complex64)
-    alpha, beta = sla.eig(M_, Sel, homogeneous_eigvals=True)[0]
-    scale = float(np.max(np.abs(Sel))) + 1e-30
-    fin = np.abs(beta) > FIN_TOL * scale
-    return (alpha[fin] / beta[fin]).astype(np.complex64)
-
-def _screen(M_, Sel, mu, n_, d, p, m):
-    #Per degree resonance report against the transmission zeros
-    rep = {"regime": ("overdetermined" if p > m else
-                      "underdetermined" if m > p else "square")}
-    zeros = _transmission_zeros(M_, Sel)
-    zscale = float(np.max(np.abs(zeros))) + 1.0 if zeros.size else 1.0
-    degs = {}
-    for k in range(1, d + 1):
-        lam = operator_eigs(mu, n_, k)
-        if zeros.size:
-            gap = float(np.min(np.abs(lam[:, None] - zeros[None, :]))) / zscale
-        else:
-            gap = np.inf
-        degs[k] = {"min_gap": gap, "resonant": bool(gap < RES_TOL)}
-    rep["degrees"] = degs
-    rep["resonant"] = any(v["resonant"] for v in degs.values())
-    rep["solvable"] = (rep["regime"] != "overdetermined") and not rep["resonant"]
-    return rep
 
 class FBIFast:
     #Decoupled FBI solver, fixed reuses the factorization, check guards solvability
@@ -129,8 +104,8 @@ class FBIFast:
             rep = dict(self._rep)
             rep["branch"] = branch
             return rep
-        rep = _screen(np.asarray(M_), np.asarray(Sel), mu,
-                      self.n_, self.d, self.p, self.m)
+        rep = screen(np.asarray(M_), np.asarray(Sel), mu,
+                     self.n_, self.d, self.p, self.m)
         rep["checked"] = True
         rep["branch"] = branch
         if self.check == "setup":

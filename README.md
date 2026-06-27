@@ -150,7 +150,7 @@ Following NST, the FBIJAX component solves these equations by expanding `theta` 
 <p align="center">
   <img src="docs/figures/residual_vs_distance_truefbi.png" width="48%" alt="True FBI residual versus distance from the operating point">
   <img src="docs/figures/residual_vs_distance.png" width="48%" alt="FBI residual versus distance from the operating point">
-  
+
 </p>
 <p align="center">
   <em>(a) FBI solution (b) Fast FBI solution. A stale solve degrades as the state moves away, while re-solving at each point holds the error down.</em>

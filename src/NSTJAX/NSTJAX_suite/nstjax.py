@@ -9,6 +9,7 @@ from NSTJAX.NSTJAX_suite.polylib import crd
 from NSTJAX.NSTJAX_suite.taylor import build_taylor
 from NSTJAX.NSTJAX_suite.fbi import fbi
 from NSTJAX.NSTJAX_suite.fbi_fast import FBIFast
+from NSTJAX.NSTJAX_suite.reporter import build_report
 from NSTJAX.NSTJAX_suite.fbi_eval import (compute_theta as _eval_theta,
                                           compute_lambda as _eval_lambda)
 
@@ -35,6 +36,7 @@ class NSTJAX:
         self.kron_dim = (n + p) * crd(n_, d)
         self.solver_name = None
         self.report = None
+        self._rep_cache = None
         self.th = None
         self.la = None
         self._tay_f = self._tay_h = self._tay_e = None
@@ -48,7 +50,7 @@ class NSTJAX:
             use_fast = (self.solver == "fbi_fast")
         if use_fast:
             self._fast = FBIFast(self.n, self.m, self.p, self.n_, self.d,
-                                 fixed=self.fixed, check=self.check, branch=self.branch)
+                                 fixed=self.fixed, check="off", branch=self.branch)
             self.solver_name = "fbi_fast"
         else:
             self._fast = None
@@ -56,9 +58,10 @@ class NSTJAX:
 
     def _solve(self, f, h, fe):
         if self._fast is not None:
-            return self._fast.solve(f, h, fe)
+            th, la, _ = self._fast.solve(f, h, fe)
+            return th, la
         th, la = fbi(f, h, fe, self.n, self.m, self.p, self.n_, self.d)
-        return th, la, None
+        return th, la
 
     def warm_start(self, z0=None, x_0=None, warm_reps=2, samples=1):
         #Build the maps, pick the solver, compile fbi and inference at real shapes
@@ -88,11 +91,18 @@ class NSTJAX:
         f = self._tay_f(z)
         h = self._tay_h(z)
         fe = self._tay_e(x_)
-        th, la, report = self._solve(f, h, fe)
+        th, la = self._solve(f, h, fe)
         if self.reshape:
             th = jnp.reshape(th, (self.n, -1))
             la = jnp.reshape(la, (self.m, -1))
-        self.report = report
+        #Solver agnostic report, setup caches the first screen
+        if self.check == "setup" and self._rep_cache is not None:
+            self.report = self._rep_cache
+        else:
+            self.report = build_report(f, h, fe, self.n, self.m,
+                                       self.p, self.n_, self.d, self.check)
+            if self.check == "setup":
+                self._rep_cache = self.report
         if self.store:
             self.th, self.la = th, la
         return th, la
