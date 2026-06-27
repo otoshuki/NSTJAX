@@ -122,6 +122,22 @@ As the world model improves, the FBI solution computed on it approaches the one 
 
 <p align="center"><em>World model learning: the learned manifold and feedforward errors against the true FBI solution, and the closed loop tracking error converging to the oracle bound.</em></p>
 
+### Manifold degree comparison for swinging payload tracking
+
+`example_swing_drone.py` solves a cable suspended payload problem. We can see the difference in performance between degrees 1, 2, 3, and 4. The higher degree manifolds capture more of the swing nonlinearity, so the payload rides closer to the reference.
+
+<p align="center">
+  <img src="docs/figures/payload_degree_compare.gif" width="560" alt="Payload tracking at manifold degree 1, 2 and 3">
+</p>
+
+<p align="center"><em>Reference load against the closed loop payload path at degree 1, 2 and 3.</em></p>
+
+<p align="center">
+  <img src="docs/figures/payload_degree_error.png" width="560" alt="Payload tracking error by manifold degree">
+</p>
+
+<p align="center"><em>Payload tracking error norm over one reference period for each manifold degree.</em></p>
+
 ---
 
 ## Solution Validation Against Original NST
